@@ -4,7 +4,7 @@ My way of generating SQL using Ruby.
 
 # Warning:
 
-Don't use this. Instead, use [Arel](http://github.com/rails/arel)
+Don't use this. Instead, use [Arel](http://github.com/rails/arel).
 
 # Another warning:
 
@@ -14,15 +14,15 @@ This is not yet usable.
 
 <!-- Add this line to your application's Gemfile: -->
 
-    <!-- gem 'i_dig_sql' -->
+  <!-- gem 'i_dig_sql' -->
 
 <!-- And then execute: -->
 
-    <!-- $ bundle -->
+  <!-- $ bundle -->
 
 <!-- Or install it yourself as: -->
 
-    <!-- $ gem install i_dig_sql -->
+  <!-- $ gem install i_dig_sql -->
 
 ## Usage
 
