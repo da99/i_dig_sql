@@ -1,29 +1,33 @@
-# IDigSql
+# I\_Dig\_Sql
 
-TODO: Write a gem description
+My way of generating SQL using Ruby.
 
-## Installation
+# Warning:
 
-Add this line to your application's Gemfile:
+Don't use this. Instead, use [Arel](http://github.com/rails/arel)
 
-    gem 'i_dig_sql'
+# Another warning:
 
-And then execute:
+This is not yet usable.
 
-    $ bundle
+<!-- ## Installation -->
 
-Or install it yourself as:
+<!-- Add this line to your application's Gemfile: -->
 
-    $ gem install i_dig_sql
+    <!-- gem 'i_dig_sql' -->
+
+<!-- And then execute: -->
+
+    <!-- $ bundle -->
+
+<!-- Or install it yourself as: -->
+
+    <!-- $ gem install i_dig_sql -->
 
 ## Usage
 
-TODO: Write usage instructions here
+Not coming anytime soon.
 
-## Contributing
 
-1. Fork it ( http://github.com/<my-github-username>/i_dig_sql/fork )
-2. Create your feature branch (`git checkout -b my-new-feature`)
-3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin my-new-feature`)
-5. Create new Pull Request
+
+
