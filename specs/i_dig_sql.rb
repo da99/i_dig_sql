@@ -56,4 +56,12 @@ describe "#to_sql" do
 
 end # === describe #to_sql ===
 
+describe "String#i_dig_sql" do
+
+  it "returns an I_Dig_Sql instance set to String" do
+    o = "SELECT id FROM my_table".i_dig_sql
+    sql(o.to_sql[:sql]).should == sql(%^SELECT id FROM my_table^)
+  end
+
+end # === describe String ===
 
