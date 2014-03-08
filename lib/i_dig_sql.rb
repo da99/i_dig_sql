@@ -4,14 +4,21 @@ class I_Dig_Sql
   class << self
   end # === class self ===
 
-  def initialize
+  def initialize sql = nil, args = nil
     @withs   = []
     @select  = nil
     @as      = nil
+    @unions  = []
+    @sql     = sql
+    @args    = args || []
+    yield self if block_given?
   end
 
   def AS o = :return
-    return @as if o == :return
+    if o == :return
+      return @as if @as
+      raise "@as not set"
+    end
 
     @as = o
     self
@@ -41,23 +48,38 @@ class I_Dig_Sql
     self
   end
 
+  def UNION o
+    @unions << o
+
+    self
+  end
+
   def to_sql
-    s = ""
 
+    if @sql
+      s = @sql
+    else
 
-    unless @withs.empty?
-      s << "\n  WITH"
-      s << @withs.map { |w|
-        " #{w.AS} AS (#{w.to_sql[:sql]}) "
-      }.join("\n,\n")
-    end
+      s = ""
+      unless @withs.empty?
+        s << "\n  WITH"
+        s << @withs.map { |w|
+          " #{w.AS} AS (#{w.to_sql[:sql]}) "
+        }.join("\n,\n")
+      end
 
-    s << "\n"
+      s << "\n"
 
-    if @select
-      s << "\n  SELECT #{@select[:select]}"
-      s << "\n  FROM   #{@select[:from]}"   if @select[:from]
-      s << "\n  WHERE  #{@select[:where]}"  if @select[:where]
+      if @select
+        s << "\n  SELECT #{@select[:select]}"
+        s << "\n  FROM   #{@select[:from]}"   if @select[:from]
+        s << "\n  WHERE  #{@select[:where]}"  if @select[:where]
+      end
+
+    end # === if @sql
+
+    if not @unions.empty?
+      s << "\nUNION  #{@unions.map { |sql| sql.to_sql[:sql] }.join "\nUNION\n" }"
     end
 
     s << "\n"
@@ -71,11 +93,23 @@ sn = I_Dig_Sql.new
 sn.SELECT(' ? AS parent_id ', 22)
 .FROM(' screen_name ')
 
+mag = I_Dig_Sql.new
+mag.SELECT(' ? AS parent_id ', 23)
+.FROM(' magazine ')
+
 sql = I_Dig_Sql.new
 puts sql
-.WITH(sn.AS('the_screen_names'))
+.WITH(sn.AS('sn_parent'))
+.WITH(mag.AS('mag_parent'))
+.WITH(
+  I_Dig_Sql.new('SELECT * FROM mag_parent')
+  .UNION(
+    I_Dig_Sql.new('SELECT * FROM sn_parent')
+  )
+  .AS('parent_tree')
+)
 .SELECT(" ? AS parent_id ", 11)
-.FROM("table_name")
+.FROM("the_tree")
 .WHERE(" id > 0")
 .to_sql[:sql]
 
