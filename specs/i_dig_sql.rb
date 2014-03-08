@@ -40,6 +40,22 @@ describe "#WITH()" do
 
 end # === describe #WITH() ===
 
+describe "#comma" do
+
+  it "saves arg as a WITH statement" do
+    o = I_Dig_Sql.new
+    .WITH('cte1 AS ( SELECT * FROM table_1 ) ')
+    .comma('cte2 AS ( SELECT * FROM table_2 )')
+
+    sql(o).should == sql(%^
+                         WITH
+                           cte1 AS ( SELECT * FROM table_1 )
+                         , cte2 AS ( SELECT * FROM table_2 )
+                         ^)
+  end
+
+end # === describe #comma ===
+
 describe "#to_sql" do
 
   it "includes both WITH and SELECT statements" do
