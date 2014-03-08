@@ -29,3 +29,20 @@ describe "#WITH()" do
 
 end # === describe #WITH() ===
 
+describe "#to_sql" do
+
+  it "includes both WITH and SELECT statements" do
+    o = I_Dig_Sql.new
+    o.WITH("cte AS (SELECT * FROM other_table)")
+    o.SELECT(" parent_id ")
+    .FROM("main_table")
+    sql(o).should == sql(%^
+                         WITH cte AS (SELECT * FROM other_table)
+                         SELECT parent_id
+                         FROM main_table
+                         ^)
+  end
+
+end # === describe #to_sql ===
+
+
