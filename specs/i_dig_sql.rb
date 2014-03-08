@@ -27,6 +27,17 @@ describe "#WITH()" do
     sql(o).should == sql("WITH some_table AS (SELECT * FROM other_table)")
   end
 
+  it "accepts another I_Dig_Sql object" do
+    other = I_Dig_Sql.new("SELECT * FROM main_table")
+    .AS('cte1')
+
+    o = I_Dig_Sql.new
+    .WITH(other)
+    sql(o).should == sql(%^
+      WITH cte1 AS ( SELECT * FROM main_table )
+    ^)
+  end
+
 end # === describe #WITH() ===
 
 describe "#to_sql" do
