@@ -100,32 +100,4 @@ class I_Dig_Sql
 end # === class I_Dig_Sql ===
 
 
-__END__
-require './lib/i_dig_sql/String'
-sn = I_Dig_Sql.new
-sn.SELECT(' ? AS parent_id ', 22)
-.FROM(' screen_name ')
-
-mag = I_Dig_Sql.new
-mag.SELECT(' ? AS parent_id ', 23)
-.FROM(' magazine ')
-
-sql = I_Dig_Sql.new
-puts sql
-.WITH(sn.AS('sn_parent'))
-.comma(mag.AS('mag_parent'))
-.comma(
-  'SELECT * FROM mag_parent'.i_dig_sql
-  .UNION(
-    'SELECT * FROM sn_parent'.i_dig_sql
-  )
-  .AS('parent_tree')
-)
-.SELECT(" ? AS parent_id ", 11)
-.FROM("the_tree")
-.WHERE(" id > 0")
-.to_sql[:sql]
-
-
-
 

@@ -5,15 +5,16 @@ require 'i_dig_sql/version'
 
 Gem::Specification.new do |spec|
   spec.name          = "i_dig_sql"
-  spec.version       = IDigSql::VERSION
+  spec.version       = I_Dig_Sql::VERSION
   spec.authors       = ["da99"]
   spec.email         = ["i-hate-spam-1234567@mailinator.com"]
-  spec.summary       = %q{Yet another way of generating SQL in Ruby.}
+  spec.summary       = %q{Yet another way of generating Postgresql 9.2+ in Ruby.}
   spec.description   = %q{
   You probably want another gem: arel. Use that
   to generate SQL using Ruby.
+  This gem only generates SELECT and WITH (ie CTE) statements/expressions.
   }
-  spec.homepage      = ""
+  spec.homepage      = "https://github.com/da99/i_dig_sql"
   spec.license       = "MIT"
 
   spec.files         = `git ls-files -z`.split("\x0")
