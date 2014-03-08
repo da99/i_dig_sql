@@ -8,8 +8,11 @@ Gem::Specification.new do |spec|
   spec.version       = IDigSql::VERSION
   spec.authors       = ["da99"]
   spec.email         = ["i-hate-spam-1234567@mailinator.com"]
-  spec.summary       = %q{TODO: Write a short summary. Required.}
-  spec.description   = %q{TODO: Write a longer description. Optional.}
+  spec.summary       = %q{Yet another way of generating SQL in Ruby.}
+  spec.description   = %q{
+  You probably want another gem: arel. Use that
+  to generate SQL using Ruby.
+  }
   spec.homepage      = ""
   spec.license       = "MIT"
 
@@ -20,4 +23,5 @@ Gem::Specification.new do |spec|
 
   spec.add_development_dependency "bundler", "~> 1.5"
   spec.add_development_dependency "rake"
+  spec.add_development_dependency "bacon"
 end

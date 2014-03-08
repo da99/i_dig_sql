@@ -57,7 +57,8 @@ class I_Dig_Sql
   def to_sql
 
     if @sql
-      s = @sql
+      s = "\n  "
+      s << @sql
     else
 
       s = ""
@@ -79,7 +80,7 @@ class I_Dig_Sql
     end # === if @sql
 
     if not @unions.empty?
-      s << "\nUNION  #{@unions.map { |sql| sql.to_sql[:sql] }.join "\nUNION\n" }"
+      s << "\n  UNION  #{@unions.map { |sql| sql.to_sql[:sql] }.join "\nUNION\n" }"
     end
 
     s << "\n"
@@ -89,6 +90,7 @@ class I_Dig_Sql
 
 end # === class I_Dig_Sql ===
 
+require './lib/i_dig_sql/String'
 sn = I_Dig_Sql.new
 sn.SELECT(' ? AS parent_id ', 22)
 .FROM(' screen_name ')
@@ -102,9 +104,9 @@ puts sql
 .WITH(sn.AS('sn_parent'))
 .WITH(mag.AS('mag_parent'))
 .WITH(
-  I_Dig_Sql.new('SELECT * FROM mag_parent')
+  'SELECT * FROM mag_parent'.i_dig_sql
   .UNION(
-    I_Dig_Sql.new('SELECT * FROM sn_parent')
+    'SELECT * FROM sn_parent'.i_dig_sql
   )
   .AS('parent_tree')
 )
