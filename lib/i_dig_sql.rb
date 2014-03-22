@@ -1,12 +1,4 @@
 
-# TODO:
-#
-#   -- Add .WHERE("string", :'=', i_dig_sql)
-#   -- Add .WHERE("string", :'=', rec)
-#   -- Add .WHERE("string = ? ", rec)
-#   -- Add .WHERE("string = ? ", i_dig_sql)
-#
-#
 class I_Dig_Sql
 
   class << self
