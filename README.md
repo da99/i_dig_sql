@@ -15,5 +15,9 @@ This is not yet usable.
 Not coming anytime soon.
 
 
+## Alternatives:
+
+  * K'bam [https://github.com/vilnius-leopold/kbam](https://github.com/vilnius-leopold/kbam)
+
 
 
