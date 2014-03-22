@@ -48,6 +48,13 @@ describe "#WITH()" do
     args(o).should == [1]
   end
 
+  it "merges args from other I_Dig_Sql objects" do
+    other = I_Dig_Sql.new("SELECT * FROM main_table WHERE i = ?", 1).AS('cte1')
+
+    o = I_Dig_Sql.new
+    .WITH(other)
+    args(o).should == [1]  end
+
 end # === describe #WITH() ===
 
 describe "#comma" do

@@ -12,15 +12,20 @@ class I_Dig_Sql
   class << self
   end # === class self ===
 
-  def initialize sql = nil, args = nil
+  def initialize sql = nil, *args
     @withs   = []
     @select  = nil
     @as      = nil
     @unions  = []
     @sql     = sql
-    @args    = args || []
+    @args    = args
     yield self if block_given?
   end
+
+  def args
+    @args
+  end
+  protected :args
 
   def AS o = :return
     if o == :return
@@ -34,6 +39,7 @@ class I_Dig_Sql
 
   def WITH o, *args
     @withs << o
+    @args.concat(o.args) if o.is_a?(I_Dig_Sql)
     @args.concat args
     self
   end
