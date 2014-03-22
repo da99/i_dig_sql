@@ -59,8 +59,16 @@ class I_Dig_Sql
   end
 
   def WHERE o, *args
+
+    if args.size == 1 && args.first.is_a?(I_Dig_Sql)
+      sql = args.first.to_sql
+      o = "#{o} ( #{sql[:sql]} )"
+      @args.concat sql[:args]
+    else
+      @args.concat args
+    end
+
     @select[:where] = o
-    @args.concat args
     self
   end
 

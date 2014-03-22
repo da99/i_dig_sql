@@ -114,6 +114,37 @@ describe "#to_sql" do
 
 end # === describe #to_sql ===
 
+describe "#WHERE" do
+
+  it "merges sql into string if arg is a I_Dig_Sql" do
+    other = I_Dig_Sql.new.SELECT("*").FROM("other")
+
+    o = I_Dig_Sql.new.SELECT("parent_id")
+    .FROM("main")
+    .WHERE("id IN", other)
+
+    sql(o).should == sql(%~
+      SELECT parent_id
+      FROM main
+      WHERE id IN (
+        SELECT * FROM other
+      )
+    ~)
+  end
+
+  it "merges args if arg is a I_Dig_Sql" do
+    other = I_Dig_Sql.new.SELECT("*").FROM("other")
+    .WHERE("id = ", 1)
+
+    o = I_Dig_Sql.new.SELECT("parent_id")
+    .FROM("main")
+    .WHERE("id IN", other)
+
+    args(o).should == [1]
+  end
+
+end # === describe #WHERE ===
+
 
 describe "String#i_dig_sql" do
 
