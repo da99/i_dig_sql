@@ -10,6 +10,10 @@ def sql o
   end
 end
 
+def args o
+  o.to_sql[:args]
+end
+
 describe ".new" do
 
   it "returns a I_Dig_Sql if passed a String" do
@@ -38,11 +42,17 @@ describe "#WITH()" do
     ^)
   end
 
+  it "accepts args" do
+    o = I_Dig_Sql.new
+    .WITH(" some_table AS (SELECT * FROM other_table WHERE id = ?) ", 1)
+    args(o).should == [1]
+  end
+
 end # === describe #WITH() ===
 
 describe "#comma" do
 
-  it "saves arg as a WITH statement" do
+  it "acts like a WITH statement" do
     o = I_Dig_Sql.new
     .WITH('cte1 AS ( SELECT * FROM table_1 ) ')
     .comma('cte2 AS ( SELECT * FROM table_2 )')
@@ -54,23 +64,49 @@ describe "#comma" do
                          ^)
   end
 
+  it "saves args" do
+    o = I_Dig_Sql.new
+    .WITH('cte1 AS ( SELECT * FROM table_1 ) ')
+    .comma('cte2 AS ( SELECT * FROM table_2 WHERE id = ?)', 2)
+
+    args(o).should == [2]
+  end
+
 end # === describe #comma ===
 
 describe "#to_sql" do
 
-  it "includes both WITH and SELECT statements" do
-    o = I_Dig_Sql.new
-    o.WITH("cte AS (SELECT * FROM other_table)")
-    o.SELECT(" parent_id ")
-    .FROM("main_table")
-    sql(o).should == sql(%^
-                         WITH cte AS (SELECT * FROM other_table)
-                         SELECT parent_id
-                         FROM main_table
-                         ^)
-  end
+  describe ":sql" do
+
+    it "includes both WITH and SELECT statements" do
+      o = I_Dig_Sql.new
+      o.WITH("cte AS (SELECT * FROM other_table)")
+      o.SELECT(" parent_id ")
+      .FROM("main_table")
+      sql(o).should == sql(%^
+                           WITH cte AS (SELECT * FROM other_table)
+                           SELECT parent_id
+                           FROM main_table
+                           ^)
+    end
+
+  end # === describe :sql ===
+
+  describe ":args" do
+
+    it "returns an array of arguments" do
+      o = I_Dig_Sql.new
+      .SELECT(" parent_id ")
+      .FROM("main_table")
+      .WHERE(" ? = ? AND b = ? ", 1, 2, 3)
+      args(o).should == [1,2,3]
+    end
+
+  end # === describe :args ===
+  
 
 end # === describe #to_sql ===
+
 
 describe "String#i_dig_sql" do
 

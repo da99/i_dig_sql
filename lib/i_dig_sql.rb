@@ -1,4 +1,12 @@
 
+# TODO:
+#
+#   -- Add .WHERE("string", :'=', i_dig_sql)
+#   -- Add .WHERE("string", :'=', rec)
+#   -- Add .WHERE("string = ? ", rec)
+#   -- Add .WHERE("string = ? ", i_dig_sql)
+#
+#
 class I_Dig_Sql
 
   class << self
@@ -24,15 +32,13 @@ class I_Dig_Sql
     self
   end
 
-  def WITH o
+  def WITH o, *args
     @withs << o
-
+    @args.concat args
     self
   end
 
-  def comma o
-    WITH o
-  end
+  alias_method :comma, :WITH
 
   def SELECT str, *args
     @select = {:select=>str, :args=>args, :from=>nil, :where=>nil}
@@ -46,9 +52,9 @@ class I_Dig_Sql
     self
   end
 
-  def WHERE o
+  def WHERE o, *args
     @select[:where] = o
-
+    @args.concat args
     self
   end
 
@@ -94,7 +100,7 @@ class I_Dig_Sql
 
     s << "\n"
 
-    {:sql=>s, :args=>[]}
+    {:sql=>s, :args=>@args}
   end
 
 end # === class I_Dig_Sql ===
