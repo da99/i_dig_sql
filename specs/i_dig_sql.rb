@@ -143,6 +143,17 @@ describe "#WHERE" do
     args(o).should == [1]
   end
 
+  it "raises exception if used more than once" do
+    lambda {
+      I_Dig_Sql.new
+      .SELECT('*')
+      .FROM('main')
+      .WHERE("id = 1")
+      .WHERE("id = 2")
+    }.should.raise(I_Dig_Sql::Only_One_Where)
+    .message.should.match(/Multiple use of WHERE:/)
+  end
+
 end # === describe #WHERE ===
 
 

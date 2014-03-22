@@ -1,6 +1,8 @@
 
 class I_Dig_Sql
 
+  Only_One_Where = Class.new(RuntimeError)
+
   class << self
   end # === class self ===
 
@@ -51,6 +53,10 @@ class I_Dig_Sql
   end
 
   def WHERE o, *args
+
+    if @select[:where]
+      raise Only_One_Where.new("Multiple use of WHERE: #{@select[:where]} |--| #{o}")
+    end
 
     if args.size == 1 && args.first.is_a?(I_Dig_Sql)
       sql = args.first.to_sql
