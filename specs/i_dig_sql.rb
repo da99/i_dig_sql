@@ -166,3 +166,66 @@ describe "String#i_dig_sql" do
 
 end # === describe String ===
 
+
+describe ".tag_as" do
+
+  it "adds tag to tag list of last query" do
+    o = "SELECT *".i_dig_sql
+    o.WITH("cte1", "SELECT * FROM table_1")
+    .tag_as('group 1')
+    o.WITH("cte2", "SELECT * FROM table_2")
+    .tag_as('group 1')
+
+    list = o.find_tagged('group 1')
+    list.size.should == 2
+    sql(list.first).should == sql("SELECT * FROM table_1")
+    sql(list.last).should  == sql("SELECT * FROM table_2")
+  end
+
+  it "raises error if last query was not a WITH/cte" do
+    o = "SELECT *".i_dig_sql
+    should.raise(RuntimeError) {
+      o.tag_as('group 1')
+    }.message.should.match /Last query was not a WITH\/cte/i
+  end
+
+end # === describe .tag_as ===
+
+describe "find_tagged" do
+
+  it "returns all WITH/cte querys with tag" do
+    o = "SELECT *".i_dig_sql
+    o.WITH("cte1", "SELECT * FROM table_1")
+    .tag_as('group 1')
+    o.WITH("cte2", "SELECT * FROM table_2")
+    .tag_as('group 1')
+
+    list = o.find_tagged('group 1')
+    list.size.should == 2
+    sql(list.first).should == sql("SELECT * FROM table_1")
+    sql(list.last).should  == sql("SELECT * FROM table_2")
+  end
+
+  it "only returns WITH/cte querys with tags, and no others" do
+    o = "SELECT *".i_dig_sql
+    o.WITH("cte1", "SELECT * FROM table_1").tag_as('group 1')
+    o.WITH("cte2", "SELECT * FROM table_2").tag_as('group 1')
+    o.WITH("cte3", "SELECT * FROM table_3").tag_as('group 2')
+
+    list = o.find_tagged('group 1')
+    list.size.should == 2
+    sql(list.first).should == sql("SELECT * FROM table_1")
+    sql(list.last).should  == sql("SELECT * FROM table_2")
+  end
+
+end # === describe find_tagged ===
+
+
+
+
+
+
+
+
+
+
