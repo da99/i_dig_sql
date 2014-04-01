@@ -1,4 +1,6 @@
 
+require "pry"
+require "Bacon_Colored"
 require "i_dig_sql"
 require "i_dig_sql/String"
 
@@ -171,15 +173,15 @@ describe ".tag_as" do
 
   it "adds tag to tag list of last query" do
     o = "SELECT *".i_dig_sql
-    o.WITH("cte1", "SELECT * FROM table_1")
+    o.WITH("cte1 AS (SELECT * FROM table_1)")
     .tag_as('group 1')
-    o.WITH("cte2", "SELECT * FROM table_2")
+    o.WITH("cte2 AS (SELECT * FROM table_2)")
     .tag_as('group 1')
 
     list = o.find_tagged('group 1')
     list.size.should == 2
-    sql(list.first).should == sql("SELECT * FROM table_1")
-    sql(list.last).should  == sql("SELECT * FROM table_2")
+    sql(list.first).should == sql("cte1 AS (SELECT * FROM table_1)")
+    sql(list.last).should  == sql("cte2 AS (SELECT * FROM table_2)")
   end
 
   it "raises error if last query was not a WITH/cte" do
@@ -191,7 +193,7 @@ describe ".tag_as" do
 
 end # === describe .tag_as ===
 
-describe "find_tagged" do
+describe ".find_tagged" do
 
   it "returns all WITH/cte querys with tag" do
     o = "SELECT *".i_dig_sql

@@ -8,6 +8,7 @@ class I_Dig_Sql
 
   def initialize sql = nil, *args
     @withs   = []
+    @tags_for_withs = {}
     @select  = nil
     @as      = nil
     @unions  = []
@@ -33,12 +34,29 @@ class I_Dig_Sql
 
   def WITH o, *args
     @withs << o
+    @tags_for_withs[o] = []
     @args.concat(o.args) if o.is_a?(I_Dig_Sql)
     @args.concat args
     self
   end
 
   alias_method :comma, :WITH
+
+  def tag_as name
+    list = @tags_for_withs[@withs.last]
+    raise "Last query was not a WITH/cte query" unless list
+    list.push name
+    self
+  end
+
+  def find_tagged name
+    @tags_for_withs.inject([]) { |memo, (k,v)|
+      if v.include?(name)
+        memo << k
+      end
+      memo
+    }
+  end
 
   def SELECT str, *args
     @select = {:select=>str, :args=>args, :from=>nil, :where=>nil}
