@@ -65,8 +65,10 @@ class I_Dig_Sql
       @sql[key]
     end
 
-    s.gsub!(/\{\{\s?\*\s?([a-zA-Z0-9\_]+)\s?\}\}\}/) do |match|
+    s.gsub!(/\{\{\s?\*\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
       key = $1.to_sym
+      ctes << key
+
       # --- check to see if key exists.
       # Uses :default_proc if missing.
       @sql[key.to_sym]
@@ -76,14 +78,19 @@ class I_Dig_Sql
 
     s.gsub!(/\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
       key = $1.to_sym
-      ctes << key.to_sym
+      ctes << key
       key
     end
 
     return s if ctes.empty?
 
     %^
-      WITH #{ctes.map { |k| "#{k} AS (#{@sql[k]})" }.join "\n      ,\n"}
+      WITH
+      #{ctes.map { |k| "#{k} AS (
+        #{@sql[k]}
+      )" }.join "
+      ,
+      "}
       #{s}
     ^
   end
