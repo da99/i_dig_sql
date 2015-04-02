@@ -1,136 +1,91 @@
 
 class I_Dig_Sql
 
-  Only_One_Where = Class.new(RuntimeError)
 
   class << self
   end # === class self ===
 
-  def initialize sql = nil, *args
-    @withs   = []
-    @tags_for_withs = {}
-    @select  = nil
-    @as      = nil
-    @unions  = []
-    @sql     = sql
-    @args    = args
-    yield self if block_given?
-  end
-
-  def args
-    @args
-  end
-  protected :args
-
-  def AS o = :return
-    if o == :return
-      return @as if @as
-      raise "@as not set"
-    end
-
-    @as = o
-    self
-  end
-
-  def WITH o, *args
-    @withs << o
-    @tags_for_withs[o] = []
-    @args.concat(o.args) if o.is_a?(I_Dig_Sql)
-    @args.concat args
-    self
-  end
-
-  alias_method :comma, :WITH
-
-  def tag_as name
-    list = @tags_for_withs[@withs.last]
-    raise "Last query was not a WITH/cte query" unless list
-    list.push name
-    self
-  end
-
-  def find_tagged name
-    @tags_for_withs.inject([]) { |memo, (k,v)|
-      if v.include?(name)
-        memo << k
-      end
-      memo
+  def initialize
+    @sql  = {}
+    @sql.default_proc = lambda { |h, k|
+      fail ArgumentError, "Unknown key: #{k.inspect}"
     }
+
+    @vars = {}
+    @vars.default_proc = lambda { |h, k|
+      fail ArgumentError, "Unknown key: #{k.inspect}"
+    }
+
+    @string = ""
   end
 
-  def SELECT str, *args
-    @select = {:select=>str, :args=>args, :from=>nil, :where=>nil}
-
-    self
+  def << str
+    @string << (
+      if @string.empty?
+        str
+      else
+        "\n" << str
+      end
+    )
   end
 
-  def FROM o
-    @select[:from] = o
-
-    self
-  end
-
-  def WHERE o, *args
-
-    if @select[:where]
-      raise Only_One_Where.new("Multiple use of WHERE: #{@select[:where]} |--| #{o}")
-    end
-
-    if args.size == 1 && args.first.is_a?(I_Dig_Sql)
-      sql = args.first.to_sql
-      o = "#{o} ( #{sql[:sql]} )"
-      @args.concat sql[:args]
+  def var *args
+    case args.size
+    when 1
+      @vars[name]
+    when 2
+      name, v = args
+      if @vars.has_key?(name) && @vars[name] != v
+        fail ArgumentError, "VAR already defined: #{name.inspect}"
+      end
+      @vars[name] = v
     else
-      @args.concat args
+      fail ArgumentError, "Unknown args: #{args.inspect}"
     end
-
-    @select[:where] = o
-    self
   end
 
-  def UNION o
-    @unions << o
+  def [] name
+    @sql[name]
+  end
 
-    self
+  def []= name, val
+    if @sql.has_key?(name) && @sql[name] != val
+      fail ArgumentError, "SQL already set: #{name.inspect}"
+    end
+
+    @sql[name] = val
   end
 
   def to_sql
+    s    = @string.dup
+    ctes = []
 
-    if @sql
-      s = "\n  "
-      s << @sql
-    else
-
-      s = ""
-      unless @withs.empty?
-        s << "\n  WITH"
-        s << @withs.map { |w|
-          case w
-          when String
-            " #{w} "
-          else
-            " #{w.AS} AS (#{w.to_sql[:sql]}) "
-          end
-        }.join("\n,\n")
-      end
-
-      s << "\n"
-
-      if @select
-        s << "\n  SELECT #{@select[:select]}"
-        s << "\n  FROM   #{@select[:from]}"   if @select[:from]
-        s << "\n  WHERE  #{@select[:where]}"  if @select[:where]
-      end
-
-    end # === if @sql
-
-    if not @unions.empty?
-      s << "\n  UNION  #{@unions.map { |sql| sql.to_sql[:sql] }.join "\nUNION\n" }"
+    s.gsub!(/\{\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}\}/) do |match|
+      key = $1.to_sym
+      @sql[key]
     end
 
-    s << "\n"
+    s.gsub!(/\{\{\s?\*\s?([a-zA-Z0-9\_]+)\s?\}\}\}/) do |match|
+      key = $1.to_sym
+      # --- check to see if key exists.
+      # Uses :default_proc if missing.
+      @sql[key.to_sym]
 
-    {:sql=>s, :args=>@args}
+      "SELECT * FROM #{key}"
+    end
+
+    s.gsub!(/\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
+      key = $1.to_sym
+      ctes << key.to_sym
+      key
+    end
+
+    return s if ctes.empty?
+
+    %^
+      WITH #{ctes.map { |k| "#{k} AS (#{@sql[k]})" }.join "\n      ,\n"}
+      #{s}
+    ^
   end
 
 end # === class I_Dig_Sql ===

@@ -1,8 +1,5 @@
 
-require "pry"
 require "Bacon_Colored"
-require "i_dig_sql"
-require "i_dig_sql/String"
 
 def sql o
   if o.is_a? String
@@ -15,6 +12,19 @@ end
 def args o
   o.to_sql[:args]
 end
+
+describe :I_Dig_Sql do
+
+  it "runs the code from README.md" do
+    readme = File.read(File.expand_path(File.dirname(__FILE__) + '/../README.md'))
+    code   = readme[/```ruby([^`]+)```/] && $1
+    line   = 0
+    readme.split("\n").detect { |l| line = line + 1; l['```ruby'] }
+    result = eval(code, nil, 'README.md', line)
+    sql(result)['WITH HEROES'].should == 'WITH HEROES'
+  end # === it
+
+end # === describe :I_Dig_Sql
 
 describe ".new" do
 

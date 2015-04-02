@@ -34,25 +34,22 @@ Please note that none of this is ready yet.
   require 'i_dig_sql'
 
   sql = I_Dig_Sql.new
-  sql[:HEROES]   = "SELECT id FROM hero WHERE id = :PERSON_ID"
-  sql[:VILLIANS] = "SELECT id FROM villian" WHERE id = :PERSON_ID"
+  sql[:HEROES]   = "SELECT id FROM hero    WHERE id = :PERSON_ID"
+  sql[:VILLIANS] = "SELECT id FROM villian WHERE id = :PERSON_ID"
   sql << %^
     SELECT *
     FROM people
     WHERE
-      id IN ({{{HEROES}}})
-      AND
-      id IN ({{{VILLIANS}}})
+      id IN ( {{{ HEROES }}} AND status = :ALIVE)
+      OR
+      id IN (SELECT ID FROM {{HEROES}} AND status = :ALIVE)
+      OR
+      id IN ( {{ * HEROES }} )
+      OR
+      id IN ( {{{ VILLIANS }}} )
   ^
 
-  sql.var :PERSON_ID, 1
-
-  string, vars = sql.to_sql
-
-  require "sequel"
-  DB = Sequel.connect "your-string-here"
-  DB[string, vars].all
-
+  sql.to_sql
 ```
 
 

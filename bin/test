@@ -5,6 +5,6 @@
 set -u -e -o pipefail
 
 
-bundle exec bacon specs/*
+bundle exec bacon -rpry -ri_dig_sql specs/i_dig_sql.rb "$@"
 
 
