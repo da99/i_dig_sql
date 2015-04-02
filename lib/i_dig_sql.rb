@@ -76,26 +76,18 @@ class I_Dig_Sql
     s    = @string.dup
     ctes = []
 
-    s.gsub!(/\{\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}\}/) do |match|
-      key = $1.to_sym
-      self[key]
-    end
-
-    s.gsub!(/\{\{\s?\*\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
-      key = $1.to_sym
-      ctes << key
-
-      # --- check to see if key exists.
-      # Uses :default_proc if missing.
-      self[key.to_sym]
-
-      "SELECT * FROM #{key}"
-    end
-
-    s.gsub!(/\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
-      key = $1.to_sym
-      ctes << key
-      key
+    s.gsub!(/\{\{\s?(\!|\*)?\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
+      key = $2.to_sym
+      case $1
+      when "!"
+        self[key]
+      when "*"
+        ctes << key
+        "SELECT * FROM #{key}"
+      else
+        ctes << key
+        key
+      end
     end
 
     return s if ctes.empty?

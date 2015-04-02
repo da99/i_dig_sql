@@ -42,11 +42,11 @@ Please note that none of this is ready yet.
     WHERE
       id IN ( {{{ HEROES }}} AND status = :ALIVE)
       OR
-      id IN (SELECT ID FROM {{HEROES}} AND status = :ALIVE)
+      id IN (SELECT ID FROM {{ HEROES }} AND status = :ALIVE)
       OR
       id IN ( {{ * HEROES }} )
       OR
-      id IN ( {{{ VILLIANS }}} )
+      id IN ( {{ ! VILLIANS }} )
   ^
 
   sql.to_sql

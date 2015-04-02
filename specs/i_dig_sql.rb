@@ -67,11 +67,11 @@ describe :I_Dig_Sql do
     ^)
   end # === it
 
-  it "replaces text with content: {{{ MY_NAME }}}" do
+  it "replaces text with content: {{ ! MY_NAME }}" do
     sql = I_Dig_Sql.new
     sql[:MY_HERO] = "SELECT * FROM hero"
     sql << %^
-      {{{ MY_HERO }}}
+      {{ ! MY_HERO }}
     ^
     sql(sql).should == "SELECT * FROM hero"
   end # === it
@@ -86,8 +86,8 @@ describe '.new' do
     second = I_Dig_Sql.new(first)
     second[:name] = "SELECT * FROM name"
     second << %^
-      {{{hero}}}
-      {{{name}}}
+      {{ ! hero }}
+      {{ ! name }}
     ^
     sql(second).should == sql(%^
       SELECT * FROM hero
