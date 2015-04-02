@@ -7,9 +7,9 @@ class I_Dig_Sql
 
   attr_reader :sql
   def initialize *args
-    @tree = args.select { |a| a.is_a? I_Dig_Sql }
-    @tree << self
-    @tree = @tree.reverse
+    @digs = args.select { |a| a.is_a? I_Dig_Sql }
+    @digs << self
+    @digs = @digs.reverse
 
     @sql  = {}
     @sql.default_proc = lambda { |h, k|
@@ -52,7 +52,7 @@ class I_Dig_Sql
   def [] name
     found = false
     var   = nil
-    @tree.detect { |f|
+    @digs.detect { |f|
       if f.sql.has_key?(name)
         var = f.sql[name]
         found = true
