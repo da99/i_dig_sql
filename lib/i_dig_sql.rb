@@ -5,7 +5,12 @@ class I_Dig_Sql
   class << self
   end # === class self ===
 
-  def initialize
+  attr_reader :sql
+  def initialize *args
+    @tree = args.select { |a| a.is_a? I_Dig_Sql }
+    @tree << self
+    @tree = @tree.reverse
+
     @sql  = {}
     @sql.default_proc = lambda { |h, k|
       fail ArgumentError, "Unknown key: #{k.inspect}"
@@ -45,7 +50,18 @@ class I_Dig_Sql
   end
 
   def [] name
-    @sql[name]
+    found = false
+    var   = nil
+    @tree.detect { |f|
+      if f.sql.has_key?(name)
+        var = f.sql[name]
+        found = true
+      end
+      found
+    }
+
+    return var if found
+    fail ArgumentError, "SQL not found: #{name.inspect}"
   end
 
   def []= name, val
@@ -62,7 +78,7 @@ class I_Dig_Sql
 
     s.gsub!(/\{\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}\}/) do |match|
       key = $1.to_sym
-      @sql[key]
+      self[key]
     end
 
     s.gsub!(/\{\{\s?\*\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
@@ -71,7 +87,7 @@ class I_Dig_Sql
 
       # --- check to see if key exists.
       # Uses :default_proc if missing.
-      @sql[key.to_sym]
+      self[key.to_sym]
 
       "SELECT * FROM #{key}"
     end
@@ -87,7 +103,7 @@ class I_Dig_Sql
     %^
       WITH
       #{ctes.map { |k| "#{k} AS (
-        #{@sql[k]}
+        #{self[k]}
       )" }.join "
       ,
       "}

@@ -46,7 +46,7 @@ describe :I_Dig_Sql do
     ^)
   end
 
-  it "adds WITH: * MY_NAME" do
+  it "adds WITH: {{ * MY_NAME }}" do
     sql = I_Dig_Sql.new
     sql[:MY_HERO] = "SELECT * FROM hero"
     sql[:MY_NAME] = "SELECT * FROM name"
@@ -67,5 +67,32 @@ describe :I_Dig_Sql do
     ^)
   end # === it
 
+  it "replaces text with content: {{{ MY_NAME }}}" do
+    sql = I_Dig_Sql.new
+    sql[:MY_HERO] = "SELECT * FROM hero"
+    sql << %^
+      {{{ MY_HERO }}}
+    ^
+    sql(sql).should == "SELECT * FROM hero"
+  end # === it
+
 end # === describe :I_Dig_Sql
 
+describe '.new' do
+
+  it "merges sql values: .new(i_dig_sql)" do
+    first = I_Dig_Sql.new
+    first[:hero] = "SELECT * FROM hero"
+    second = I_Dig_Sql.new(first)
+    second[:name] = "SELECT * FROM name"
+    second << %^
+      {{{hero}}}
+      {{{name}}}
+    ^
+    sql(second).should == sql(%^
+      SELECT * FROM hero
+      SELECT * FROM name
+    ^)
+  end # === it
+
+end # === describe '.new'
