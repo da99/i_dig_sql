@@ -1,27 +1,68 @@
 
 class I_Dig_Sql
 
+  include Enumerable
+
+  Duplicate = Class.new RuntimeError
 
   class << self
   end # === class self ===
 
-  attr_reader :sql
+  class H < Hash
+
+    def [] name
+      fail ArgumentError, "Unknown key: #{k.inspect}" unless has_key?(name)
+      super
+    end
+
+    def []= name, val
+      if has_key?(name) && self[name] != val
+        fail ArgumentError, "Key already set: #{name.inspect}"
+      end
+
+      super
+    end
+
+    def merge_these *args
+      args.each { |h|
+        h.each { |k,v|
+          self[k] = v
+        }
+      }
+      self
+    end
+
+  end # === class H
+
+  attr_reader :sqls, :vars
   def initialize *args
-    @digs = args.select { |a| a.is_a? I_Dig_Sql }
-    @digs << self
-    @digs = @digs.reverse
-
-    @sql  = {}
-    @sql.default_proc = lambda { |h, k|
-      fail ArgumentError, "Unknown key: #{k.inspect}"
+    @digs = args.select { |a|
+      a.is_a? I_Dig_Sql
     }
 
-    @vars = {}
-    @vars.default_proc = lambda { |h, k|
-      fail ArgumentError, "Unknown key: #{k.inspect}"
-    }
+    @sqls = H.new
+    @vars = H.new
 
-    @string = ""
+    @sqls.merge_these *(@digs.map(&:sqls))
+    @vars.merge_these *(@digs.map(&:vars))
+
+    @string = args.select { |s| s.is_a? String }.join("\n")
+  end
+
+  def [] name
+    @sqls[name]
+  end
+
+  def []= name, val
+    @sqls[name] = val
+  end
+
+  def each
+    if block_given?
+      @sqls.each { |k, v| yield k, v }
+    else
+      @sqls.each
+    end
   end
 
   def << str
@@ -34,42 +75,8 @@ class I_Dig_Sql
     )
   end
 
-  def var *args
-    case args.size
-    when 1
-      @vars[name]
-    when 2
-      name, v = args
-      if @vars.has_key?(name) && @vars[name] != v
-        fail ArgumentError, "VAR already defined: #{name.inspect}"
-      end
-      @vars[name] = v
-    else
-      fail ArgumentError, "Unknown args: #{args.inspect}"
-    end
-  end
-
-  def [] name
-    found = false
-    var   = nil
-    @digs.detect { |f|
-      if f.sql.has_key?(name)
-        var = f.sql[name]
-        found = true
-      end
-      found
-    }
-
-    return var if found
-    fail ArgumentError, "SQL not found: #{name.inspect}"
-  end
-
-  def []= name, val
-    if @sql.has_key?(name) && @sql[name] != val
-      fail ArgumentError, "SQL already set: #{name.inspect}"
-    end
-
-    @sql[name] = val
+  def to_pair
+    [to_sql, vars]
   end
 
   def to_sql
