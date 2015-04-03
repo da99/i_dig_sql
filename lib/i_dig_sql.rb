@@ -83,17 +83,19 @@ class I_Dig_Sql
     s    = @string.dup
     ctes = []
 
-    s.gsub!(/\{\{\s?(\!|\*)?\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
-      key = $2.to_sym
-      case $1
-      when "!"
-        self[key]
-      when "*"
-        ctes << key
-        "SELECT * FROM #{key}"
-      else
-        ctes << key
-        key
+    while s['{{']
+      s.gsub!(/\{\{\s?(\!|\*)?\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
+        key = $2.to_sym
+        case $1
+        when "!"
+          self[key]
+        when "*"
+          ctes << key
+          "SELECT * FROM #{key}"
+        else
+          ctes << key
+          key
+        end
       end
     end
 
@@ -101,7 +103,7 @@ class I_Dig_Sql
 
     %^
       WITH
-      #{ctes.map { |k| "#{k} AS (
+      #{ctes.uniq.map { |k| "#{k} AS (
         #{self[k]}
       )" }.join "
       ,
