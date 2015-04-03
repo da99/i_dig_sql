@@ -11,7 +11,7 @@ class I_Dig_Sql
   class H < Hash
 
     def [] name
-      fail ArgumentError, "Unknown key: #{k.inspect}" unless has_key?(name)
+      fail ArgumentError, "Unknown key: #{name.inspect}" unless has_key?(name)
       super
     end
 

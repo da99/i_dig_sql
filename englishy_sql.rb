@@ -77,18 +77,21 @@ puts(Englishy_Sql.new {
 SELECT *
 FROM screen_name
 WHERE
+  id = (SELECT id FROM screen_name WHERE screen_name = 'MEANIE_6294')
+  AND (
   owner_id = :AUDIENCE_ID
-  OR
-  (
-    :AUDIENCE_ID NOT IN  (BLOCKED)
-    AND
-    ( privacy = :WORLD
-      OR
-      (
-        privacy = :PROTECTED
-        AND
-        :AUDIENCE_ID IN (
-          ALLOWED
+    OR
+    (
+      :AUDIENCE_ID NOT IN  (BLOCKED)
+      AND
+      ( privacy = :WORLD
+        OR
+        (
+          privacy = :PROTECTED
+          AND
+          :AUDIENCE_ID IN (
+            ALLOWED
+          )
         )
       )
     )
