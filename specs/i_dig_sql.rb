@@ -21,7 +21,22 @@ describe :I_Dig_Sql do
     line   = 0
     readme.split("\n").detect { |l| line = line + 1; l['```ruby'] }
     result = eval(code, nil, 'README.md', line)
-    sql(result)['WITH HEROES'].should == 'WITH HEROES'
+    sql(result).should == sql(%^
+      WITH
+      HEROES AS ( SELECT id FROM hero WHERE id = :PERSON_ID ) ,
+      VILLIANS AS ( SELECT id FROM villian WHERE id = :PERSON_ID )
+      SELECT * FROM people
+      WHERE
+        id IN ( SELECT id FROM hero WHERE id = :PERSON_ID AND status = :ALIVE)
+        OR
+        id IN (SELECT ID FROM HEROES AND status = :ALIVE)
+        OR
+        id IN ( SELECT * FROM HEROES )
+        OR
+        id IN ( SELECT patron_id FROM VILLIANS )
+        OR
+        id IN ( SELECT id FROM villian WHERE id = :PERSON_ID )
+    ^)
   end # === it
 
   it "adds WITH: {{MY_NAME}}" do
@@ -46,35 +61,37 @@ describe :I_Dig_Sql do
     ^)
   end
 
-  it "adds WITH: {{ * MY_NAME }}" do
-    sql = I_Dig_Sql.new
-    sql[:MY_HERO] = "SELECT * FROM hero"
-    sql[:MY_NAME] = "SELECT * FROM name"
-    sql << %^
-      {{ * MY_NAME }}
-      {{ * MY_HERO }}
-    ^
-    sql(sql).should == sql(%^
-      WITH
-      MY_NAME AS (
-        SELECT * FROM name
-      ) ,
-      MY_HERO AS (
-        SELECT * FROM hero
-      )
-      SELECT * FROM MY_NAME
-      SELECT * FROM MY_HERO
-    ^)
-  end # === it
-
-  it "replaces text with content: {{ ! MY_NAME }}" do
+  it "replaces text with content: << MY_NAME >>" do
     sql = I_Dig_Sql.new
     sql[:MY_HERO] = "SELECT * FROM hero"
     sql << %^
-      {{ ! MY_HERO }}
+      << MY_HERO >>
     ^
     sql(sql).should == "SELECT * FROM hero"
   end # === it
+
+  %w{ * id }.each { |s|
+    it "adds WITH: << #{s} MY_NAME >>" do
+      sql = I_Dig_Sql.new
+      sql[:MY_HERO] = "SELECT id, p_id FROM hero"
+      sql[:MY_NAME] = "SELECT id, n_id FROM name"
+      sql << %^
+        << #{s} MY_NAME >>
+        << #{s} MY_HERO >>
+      ^
+      sql(sql).should == sql(%^
+        WITH
+        MY_NAME AS (
+          SELECT id, n_id FROM name
+        ) ,
+        MY_HERO AS (
+          SELECT id, p_id FROM hero
+        )
+        SELECT #{s} FROM MY_NAME
+        SELECT #{s} FROM MY_HERO
+      ^)
+    end # === it
+  }
 
 end # === describe :I_Dig_Sql
 
@@ -86,8 +103,8 @@ describe '.new' do
     second = I_Dig_Sql.new(first)
     second[:name] = "SELECT * FROM name"
     second << %^
-      {{ ! hero }}
-      {{ ! name }}
+      << hero >>
+      << name >>
     ^
     sql(second).should == sql(%^
       SELECT * FROM hero
@@ -159,10 +176,10 @@ describe :to_sql do
 
   it "renders nested replacements"  do
     i = I_Dig_Sql.new <<-EOF
-      {{ ! FIRST }}
+      << FIRST >>
     EOF
-    i[:FIRST] = " {{ ! SECOND }} "
-    i[:SECOND] = " {{ ! THIRD }} "
+    i[:FIRST] = " << SECOND >> "
+    i[:SECOND] = " << THIRD >> "
     i[:THIRD] = "FINAL"
     sql(i).should == "FINAL"
   end # === it

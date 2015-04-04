@@ -2,6 +2,7 @@
 class I_Dig_Sql
 
   include Enumerable
+  HAS_VAR = /(\{\{|\<\<)[^\}\>]+(\}\}|\>\>)/
 
   Duplicate = Class.new RuntimeError
 
@@ -83,18 +84,24 @@ class I_Dig_Sql
     s    = @string.dup
     ctes = []
 
-    while s['{{']
-      s.gsub!(/\{\{\s?(\!|\*)?\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
-        key = $2.to_sym
-        case $1
-        when "!"
-          self[key]
-        when "*"
+    while s[HAS_VAR]
+      s.gsub!(/\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
+        key = $1.to_sym
+        ctes << key
+        key
+      end
+
+      s.gsub!(/\<\<\s?([a-zA-Z0-9\_\-\ \*]+)\s?\>\>/) do |match|
+        tokens = $1.split
+        key    = tokens.pop.to_sym
+        field  = tokens.empty? ? nil : tokens.join(' ')
+
+        case
+        when field
           ctes << key
-          "SELECT * FROM #{key}"
+          "SELECT #{field} FROM #{key}"
         else
-          ctes << key
-          key
+          self[key]
         end
       end
     end
