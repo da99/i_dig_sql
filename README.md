@@ -1,29 +1,19 @@
 # I\_Dig\_Sql
 
-My way of managing SQL fragments using Ruby.
 
-# Warning:
+I'm still learning how to write decent SQL queries
+in Postgresql 9.4.  I'm using this to manage
+sub-queries in complicated SQL queries.
 
-You will hate using this.
-Instead, use:
+You won't find this useful and I am too lazy/busy
+to write decent documentation for something
+no one but me will use for esoteric purposes.
+
+Instead, this to for SQL + Ruby:
 
   * [Arel](http://github.com/rails/arel).
   * K'bam [https://github.com/vilnius-leopold/kbam](https://github.com/vilnius-leopold/kbam)
-
-# History
-
-I had trouble maintaining BIG sql queries.
-
-I tried many things.
-
-The best way (within my preferences)
-was to use sub-queries, CTEs, avoid joins as much as possible,
-and this gem to manage SQL fragments and CTEs.
-
-Naturally, you would want to use prepared statements, compiled wat-cha-me-call-its,
-  functions, views, thing-ma-jig-ers, and other tools available in your RDBMS.
-
-So this gem is for lazy, stupid people like me.
+  * Sequel [http://sequel.jeremyevans.net/rdoc/files/doc/querying_rdoc.html](http://sequel.jeremyevans.net/rdoc/files/doc/querying_rdoc.html)
 
 # Usage
 
