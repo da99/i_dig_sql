@@ -41,14 +41,17 @@ class I_Dig_Sql
       a.is_a? I_Dig_Sql
     }
 
-    @sqls = H.new
-    @vars = H.new
+    @current_def = nil
+    @sqls        = H.new
+    @vars        = H.new
 
     @sqls.merge_these *(@digs.map(&:sqls))
     @vars.merge_these *(@digs.map(&:vars))
 
-    @string = args.select { |s| s.is_a? String }.join("\n")
-    @current_def = nil
+    @fragments = (
+      args
+      .select { |s| s.is_a? String }
+    )
   end
 
   def [] name
@@ -68,13 +71,7 @@ class I_Dig_Sql
   end
 
   def << str
-    @string << (
-      if @string.empty?
-        str
-      else
-        "\n" << str
-      end
-    )
+    @fragments << str
   end
 
   def to_pair
@@ -82,30 +79,36 @@ class I_Dig_Sql
   end
 
   def to_sql
-    s    = @string.dup
     ctes = []
+    fragments = @fragments.dup
+    final     = []
 
-    while s[HAS_VAR]
-      s.gsub!(/\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
-        key = $1.to_sym
-        ctes << key
-        key
-      end
+    while s = fragments.shift
+      next unless s.is_a?(String)
 
-      s.gsub!(/\<\<\s?([a-zA-Z0-9\_\-\ \*]+)\s?\>\>/) do |match|
-        tokens = $1.split
-        key    = tokens.pop.to_sym
-        field  = tokens.empty? ? nil : tokens.join(' ')
-
-        case
-        when field
+      while s[HAS_VAR] 
+        s.gsub!(/\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
+          key = $1.to_sym
           ctes << key
-          "SELECT #{field} FROM #{key}"
-        else
-          self[key]
+          key
         end
-      end
-    end
+
+        s.gsub!(/\<\<\s?([a-zA-Z0-9\_\-\ \*]+)\s?\>\>/) do |match|
+          tokens = $1.split
+          key    = tokens.pop.to_sym
+          field  = tokens.empty? ? nil : tokens.join(' ')
+
+          case
+          when field
+            ctes << key
+            "SELECT #{field} FROM #{key}"
+          else
+            self[key]
+          end
+        end
+      end # === while s HAS_VAR
+
+    end # === while
 
     return s if ctes.empty?
 
