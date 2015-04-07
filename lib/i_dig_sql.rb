@@ -167,9 +167,26 @@ class I_Dig_Sql
     self
   end
 
+  def group_by *args
+    @current_def[:group_by] ||= []
+    @current_def[:group_by] << args
+    self
+  end
+
   def select *args
     @current_def[:select] ||= []
     @current_def[:select] << args
+    self
+  end
+
+  def get *args
+    @current_def[:from] ||= []
+    @current_def[:from] << args
+    self
+  end
+
+  def of name
+    @current_def[:start] = name
   end
 
   def type_id name
