@@ -4,10 +4,10 @@ describe "links DSL" do
   it "runs" do
     sql = I_Dig_Sql.new
 
-    sql.[:block] do
+    sql.def(:block) do
       out_in(:blocked, :victim) do
-        are :screen_name
-        has :owner_id
+        are  :screen_name
+        have :owner_id
       end
 
       type_id(:BLOCK_SCREEN) do
@@ -19,25 +19,25 @@ describe "links DSL" do
       end
     end
 
-    sql.[:post] do
+    sql.def(:post) do
       out_in :pinner, :pub do
         are    :screen_name
-        has    :owner_id
+        have   :owner_id
         not_in :block
       end
 
       order_by :created_at, :DESC
     end
 
-    sql.[:follow] do
+    sql.def(:follow) do
       out_in :fan, :star do
         are    :screen_name
-        has    :owner_id
+        have   :owner_id
         not_in :block
       end
     end
 
-    sql.[:feed] do
+    sql.def(:feed) do
 
       select(
         'follow.star.screen_name',
@@ -54,9 +54,8 @@ describe "links DSL" do
     end # === query
 
 
-    sql.to_sql
-
-
+    puts sql.to_sql
+    sql.to_sql.should == "a"
   end # === it
 
 end # === describe "links DSL"

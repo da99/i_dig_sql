@@ -48,6 +48,7 @@ class I_Dig_Sql
     @vars.merge_these *(@digs.map(&:vars))
 
     @string = args.select { |s| s.is_a? String }.join("\n")
+    @current_def = nil
   end
 
   def [] name
@@ -117,7 +118,70 @@ class I_Dig_Sql
       "}
       #{s}
     ^
+  end # === def to_sql
+
+  # === LINK DSL ====================================================
+  def def name
+    @sqls[name] = {:name=>name}
+    old = @current_def
+    @current_def= @sqls[name]
+    instance_eval &Proc.new
+    @current_def = old
+    self
   end
+
+  def out_in o, i
+    @current_def[:out] = o
+    @current_def[:in]  = i
+    @out_in ||=[]
+    @out_in << :out
+    @out_in << :in
+    instance_eval(&Proc.new) if block_given?
+    @out_in.pop
+    @out_in.pop
+    self
+  end
+
+  def are table_name
+    @current_def[:out_ftable] = table_name
+    @current_def[:in_ftable]  = table_name
+    self
+  end
+
+  def have table_name
+    @current_def[:out_has] = table_name
+    @current_def[:in_has]  = table_name
+    self
+  end
+
+  def not_in t
+    @out_in.each { |k|
+      @current_def["#{k}_not_in".to_sym] = t
+    }
+    self
+  end
+
+  def order_by *args
+    @current_def[:order_by] ||= []
+    @current_def[:order_by] << args
+    self
+  end
+
+  def select *args
+    @current_def[:select] ||= []
+    @current_def[:select] << args
+  end
+
+  def type_id name
+    old = @current_def
+    old[:type_ids] ||= []
+    old[:type_ids] << {}
+    @current_def = old[:type_ids].last
+    instance_eval(&Proc.new) if block_given?
+    @current_def = old
+    self
+  end
+  # =================================================================
 
 end # === class I_Dig_Sql ===
 
