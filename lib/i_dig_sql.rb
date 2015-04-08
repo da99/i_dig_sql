@@ -242,13 +242,18 @@ class I_Dig_Sql
       return
     end
 
-    final[:RAW] << "-- i_dig_sql: #{key.inspect}\n"
-    w, s = meta_to_WITH_and_String(target, final)
-    final[:WITH].concat w
-    final[:RAW] << s
+    final[:RAW] << "-- i_dig_sql: #{key.inspect}"
+    final[:RAW] << meta_to_fragment(target, final)
   end
 
-  def meta_to_WITH_and_String meta, final
+  def meta_to_fragment meta, final
+    sql = {
+      :SELECT   => [],
+      :FROM     => [],
+      :WHERE    => [],
+      :ORDER_BY => [],
+      :GROUP_BY => []
+    }
 
     [
       :name,
@@ -266,20 +271,20 @@ class I_Dig_Sql
       when :name
 
       when :select
-        final[:SELECT].concat(meta[:select] || ['*'])
+        sql[:SELECT].concat(meta[:select] || ['*'])
 
       when :from
         final[:WITH].concat meta[:from]
-        final[:FROM].concat meta[:from]
+        sql[:FROM].concat meta[:from]
 
       when :of
         next unless meta.has_key?(:of)
-        final[:WHERE] << %^#{meta[:from].first}.owner_id = #{meta[:of].inspect}^
+        sql[:WHERE] << %^#{meta[:from].first}.owner_id = #{meta[:of].inspect}^
 
       when :order_by
 
       when :group_by
-        final[:GROUP_BY].concat meta[:group_by]
+        sql[:GROUP_BY].concat meta[:group_by]
 
       when :in
         next unless meta.has_key?(:in)
@@ -295,7 +300,23 @@ class I_Dig_Sql
       end # === each
     }
 
-    return [[],meta.keys.inspect]
+    s = ""
+    s << %^SELECT\n  #{sql[:SELECT].join ",\n  "}\n^
+    s << %^FROM\n  #{sql[:FROM].join ",\n  "}\n^
+
+    if !sql[:WHERE].empty?
+      s << %^WHERE\n  #{sql[:WHERE].join "\n"}\n^
+    end
+
+    if !sql[:ORDER_BY].empty?
+      s << %^ORDER BY #{sql[:ORDER_BY].join ", "}\n^
+    end
+
+    if !sql[:GROUP_BY].empty?
+      s << %^GROUP BY #{sql[:GROUP_BY].join ", "}\n^
+    end
+
+    s
   end # === def cte_to_string
 
   def with_to_raw final
@@ -327,60 +348,6 @@ class I_Dig_Sql
     final[:WITH!] = compiled
 
   end # === def with_to_raw
-
-  def hash_to_with_and_string h
-    final = {
-      WITH:     [],
-      SELECT:   [],
-      FROM:     [],
-      FROM_AS:  H.new,
-      WHERE:    [],
-      WHERE_AS: H.new,
-      GROUP_BY: [],
-      HAVING:   [],
-      LIMIT:    [],
-      OFFSET:   [],
-      RAW:      []
-    }
-    string = clauses.map { |name|
-
-      next if final[name] && final[name].empty?
-
-      case name
-
-      when :SELECT
-        %^SELECT\n  #{final[name].flatten.join ",\n  "}\n^
-
-      when :FROM
-        joins = []
-        final[name].each_with_index { |v, i|
-          joins << case i
-          when 0
-            v
-          else
-            " INNER JOIN #{v}\n    ON some.id = other.id "
-          end
-        }
-        %^FROM\n  #{joins.join "\n "}\n^
-
-      when :WHERE
-        %^WHERE\n  #{final[name].join ",\n  "}\n^
-
-      when :GROUP_BY
-        %^GROUP BY\n #{final[name].join ",\n  "}^
-
-      when :HAVING
-
-      when :LIMIT
-
-      when :OFFSET
-
-      else
-        fail "Programmer error: Not dealt: #{name.inspect}"
-
-      end # === case
-    }.flatten.compact.join "\n".freeze
-  end # === def hash_to_with_and_string
 
   # === END: Rendering DSL ==========================================
 
