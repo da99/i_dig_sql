@@ -10,7 +10,7 @@ describe :I_Dig_Sql do
     result = eval(code, nil, 'README.md', line)
     sql(result).should == sql(%^
       WITH
-      HEROES AS ( SELECT id FROM hero WHERE id = :PERSON_ID ) ,
+      HEROES AS ( SELECT id FROM hero WHERE id = :PERSON_ID ),
       VILLIANS AS ( SELECT id FROM villian WHERE id = :PERSON_ID )
       SELECT * FROM people
       WHERE
@@ -38,8 +38,7 @@ describe :I_Dig_Sql do
       WITH 
       MY_HERO AS (
         SELECT * FROM hero
-      )
-      ,
+      ),
       MY_NAME AS (
         SELECT * FROM name
       )
@@ -70,7 +69,7 @@ describe :I_Dig_Sql do
         WITH
         MY_NAME AS (
           SELECT id, n_id FROM name
-        ) ,
+        ),
         MY_HERO AS (
           SELECT id, p_id FROM hero
         )

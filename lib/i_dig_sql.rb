@@ -82,7 +82,8 @@ class I_Dig_Sql
   def to_sql target_name = nil
     final = {
       WITH:     [],
-      RAW:      []
+      RAW:      [],
+      WITH!:    nil
     }
 
     fail ArgumentError, "No query defined." if !target_name && @fragments.empty?
@@ -93,8 +94,8 @@ class I_Dig_Sql
 
     string = ""
 
-    if !final[:WITH].empty?
-      string << (%^WITH\n  #{final[:WITH].join ",\n  "}\n^)
+    if final[:WITH!] && !final[:WITH!].empty?
+      string << (%^WITH\n  #{final[:WITH!].join ",\n  "}\n^)
     end
 
     string << (final[:RAW].join "\n")
@@ -278,20 +279,32 @@ class I_Dig_Sql
   end # === def cte_to_string
 
   def with_to_raw final
-    withs = final[:WITH].dup
+    withs    = final[:WITH].dup
+    used     = []
+    compiled = []
 
     while k = withs.shift
-      meta = case k
-             when Symbol
-               self[k]
-             when String
-               k
-             when Hash
-               k
-             else
-               fail ArgumentError, "Unknown type for :WITH: #{k.class}"
-             end
+      next if used.include?(k)
+
+      case k
+      when Symbol
+        meta = self[k]
+        if meta.is_a?(String)
+          compiled << "#{k} AS ( #{meta} )"
+        else
+          withs.unshift meta
+        end
+
+      when Hash
+        k
+
+      else
+        fail ArgumentError, "Unknown type for :WITH: #{k.class}"
+      end
+      used << k
     end # === while
+
+    final[:WITH!] = compiled
 
   end # === def with_to_raw
 
