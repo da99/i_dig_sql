@@ -45,8 +45,7 @@ describe "links DSL" do
         'max(post.pub.created_at)'
       )
 
-      get :follow
-      get :post
+      get :follow, :post
       of  :audience_id
 
       group_by 'follow.star'

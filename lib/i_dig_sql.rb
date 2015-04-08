@@ -79,17 +79,29 @@ class I_Dig_Sql
   end
 
   def to_sql
-    ctes = []
+    @FINAL = {
+      WITH: [],
+      FROM: [],
+      FROM_AS: H.new,
+      WHERE: [],
+      WHERE_AS: H.new,
+      GROUP_BY: [],
+      HAVING: [],
+      LIMIT: [],
+      OFFSET: [],
+      RAW: []
+    }
+
     fragments = @fragments.dup
-    final     = []
 
     while s = fragments.shift
       next unless s.is_a?(String)
 
+      @FINAL[:RAW] << s
       while s[HAS_VAR] 
         s.gsub!(/\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
           key = $1.to_sym
-          ctes << key
+          @FINAL[:WITH] << key
           key
         end
 
@@ -100,7 +112,7 @@ class I_Dig_Sql
 
           case
           when field
-            ctes << key
+            @FINAL[:WITH] << key
             "SELECT #{field} FROM #{key}"
           else
             self[key]
@@ -110,17 +122,31 @@ class I_Dig_Sql
 
     end # === while
 
-    return s if ctes.empty?
-
-    %^
-      WITH
-      #{ctes.uniq.map { |k| "#{k} AS (
-        #{self[k]}
-      )" }.join "
-      ,
-      "}
-      #{s}
-    ^
+    [
+      :WITH, :FROM, :WHERE, :GROUP_BY,
+      :HAVING, :LIMIT, :OFFSET, :RAW
+    ].map { |name|
+      next if @FINAL[name].empty?
+      case name
+      when :WITH
+        %^
+          WITH
+          #{@FINAL[name].uniq.map { |k| "#{k} AS (
+            #{self[k]}
+          )" }.join "
+          ,
+          "}
+        ^
+      when :FROM
+      when :WHERE
+      when :GROUP_BY
+      when :HAVING
+      when :LIMIT
+      when :OFFSET
+      when :RAW
+        @FINAL[name]
+      end
+    }.flatten.compact.join "\n".freeze
   end # === def to_sql
 
   # === LINK DSL ====================================================
