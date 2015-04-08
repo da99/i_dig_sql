@@ -94,7 +94,7 @@ class I_Dig_Sql
 
     string = ""
 
-    if final[:WITH!] && !final[:WITH!].empty?
+    if !final[:WITH!].empty?
       string << (%^WITH\n  #{final[:WITH!].join ",\n  "}\n^)
     end
 
@@ -236,46 +236,66 @@ class I_Dig_Sql
 
   def table_name_to_raw key, final
     target = self[key]
+
     if target.is_a?(String)
-      final[:RAW] << target
-    else
+      fragments_to_raw([target], final)
+      return
+    end
 
-      final[:RAW] << "-- i_dig_sql: #{key.inspect}\n"
+    final[:RAW] << "-- i_dig_sql: #{key.inspect}\n"
+    w, s = meta_to_WITH_and_String(target, final)
+    final[:WITH].concat w
+    final[:RAW] << s
+  end
 
-      if target.has_key?(:in) && target.has_key?(:out)
+  def meta_to_WITH_and_String meta, final
+
+    [
+      :name,
+
+      :order_by,
+      :group_by,
+      :from,
+      :select,
+
+      :in,
+      :of
+    ].each { |k|
+      case k
+
+      when :name
+
+      when :select
+        final[:SELECT].concat(meta[:select] || ['*'])
+
+      when :from
+        final[:WITH].concat meta[:from]
+        final[:FROM].concat meta[:from]
+
+      when :of
+        next unless meta.has_key?(:of)
+        final[:WHERE] << %^#{meta[:from].first}.owner_id = #{meta[:of].inspect}^
+
+      when :order_by
+
+      when :group_by
+        final[:GROUP_BY].concat meta[:group_by]
+
+      when :in
+        next unless meta.has_key?(:in)
         final[:RAW] <<(
-          target.map { |k,v|
+          meta.map { |k,v|
             "#{k}: #{v.inspect}"
           }.join ",\n    "
         )
-      end
-    end
-
-    [
-      :select, :from, :of, :group_by
-    ].each { |name|
-      case name
-
-      when :select
-        final[:SELECT].concat(target[:select] || ['*'])
-
-      when :from
-        final[:WITH].concat target[:from]
-        final[:FROM].concat target[:from]
-
-      when :of
-        next unless target.has_key?(:of)
-        final[:WHERE] << %^#{target[:from].first}.owner_id = #{target[:of].inspect}^
-
-      when :group_by
-        final[:GROUP_BY].concat target[:group_by]
 
       else
-        fail "Programmer Error: unknown key #{name.inspect}"
-      end # === case name
-    } # === string
+        fail "Programmer Error: unknown key #{k.inspect}"
 
+      end # === each
+    }
 
+    return [[],meta.keys.inspect]
   end # === def cte_to_string
 
   def with_to_raw final

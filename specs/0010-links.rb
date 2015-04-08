@@ -4,6 +4,10 @@ describe "links DSL" do
   it "runs" do
     sql = I_Dig_Sql.new
 
+    sql[:screen_name] = %^
+      SELECT * FROM screen_name
+    ^
+
     sql.def(:block) do
       out_in(:blocked, :victim) {
         are  :screen_name
