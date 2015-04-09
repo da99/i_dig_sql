@@ -70,6 +70,47 @@ class I_Dig_Sql
     )
   end
 
+  NEW_LINE   = "\n"
+  IS_COMMENT_REGEXP = /\A\s*\#/
+
+  def IS_COMMENT l
+    l[IS_COMMENT_REGEXP]
+  end
+
+  def IS_EMPTY l
+    l && l.strip.empty?
+  end
+
+  def describe str
+    blocks = []
+    last   = nil
+    lines  = str.split(NEW_LINE)
+
+    while l = lines.shift
+      is_empty   = IS_EMPTY(l)
+      is_comment = IS_COMMENT(l)
+      case
+      when is_empty && last
+        fail "not ready"
+      when is_empty && !last
+        next
+      when is_comment
+        next
+      else
+        b = [l.strip]
+        while lines.first && !IS_EMPTY(lines.first)
+          l = lines.shift
+          (b << l.strip) unless IS_COMMENT(l)
+        end
+        blocks << b
+      end
+    end # === while
+
+    require 'pp'
+    pp blocks
+    fail blocks.inspect
+  end # === def describe
+
   def fields h = nil
     return @fields unless h
     @fields.merge! h
