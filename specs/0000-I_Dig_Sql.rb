@@ -35,7 +35,7 @@ describe :I_Dig_Sql do
       {{MY_NAME}}
     ^
     sql(sql).should == sql(%^
-      WITH 
+      WITH
       MY_HERO AS (
         SELECT * FROM hero
       ),

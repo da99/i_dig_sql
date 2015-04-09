@@ -31,9 +31,8 @@ class I_Dig_Sql
       :raw=>nil,
       :vars=>H.new
     )
-
     args.each { |a|
-      case
+      case a
       when Symbol
         @data[:name] = a
       when I_Dig_Sql
@@ -41,7 +40,7 @@ class I_Dig_Sql
       when String
         @data[:raw] = a
       when Hash, H
-        if a.has_key?(:name) && a.has_key?(:real_table)
+        if a.has_key?(:unparsed) || a.has_key?(:in) || a.has_key?(:real_table)
           @data.merge! a
         else
           @data[:vars].merge! a
@@ -50,18 +49,19 @@ class I_Dig_Sql
         fail ArgumentError, "Unknown arg: #{a.inspect}"
       end
     }
+
   end # === def initialize
 
-  %w{name vars}.each { |k|
+  %w{name in out raw vars}.each { |k|
     eval <<-EOF.strip, nil, __FILE__, __LINE__
       def #{k}
-        @data[:k]
+        @data[:#{k}]
       end
     EOF
   }
 
   def has_key? name
-    return true if @raw == name
+    return true if @data[:name] == name
     !!(
       @digs.reverse.detect { |d|
         d.has_key?(d)
@@ -70,7 +70,7 @@ class I_Dig_Sql
   end
 
   def [] name
-    return @raw if @name == name
+    return self if self.name == name
     found = @digs.reverse.detect { |d|
       d.has_key?(name)
     }
@@ -80,7 +80,7 @@ class I_Dig_Sql
 
   def []= name, val
     fail ArgumentError, "Name already taken: #{name.inspect}" if has_key?(name)
-    @digs.push(I_Dig_Sql.new name, val)
+    self.def name, val
   end
 
   def each
@@ -114,6 +114,10 @@ class I_Dig_Sql
   end
 
   def def name, str = nil
+    if name && str && str[/SELECT.+FROM.+/.freeze]
+      return(@digs << I_Dig_Sql.new(name, str))
+    end
+
     if name && !str
       str  = name
       name = nil
@@ -152,38 +156,42 @@ class I_Dig_Sql
         pieces = []
       else
         first  = b.shift
-        pieces = first.to_s.split
+        pieces = first.split
       end
 
       case
 
       when first.is_a?(Symbol)
         tables[first] = {
+          :name       => first,
           :real_table => first,
           :unparsed   => b
         }
 
       when pieces.size == 1
         tables[first.to_sym] = {
+          :name       => first.to_sym,
           :real_table => first.to_sym,
           :unparsed   => b
         }
 
       when first['DEFAULT']
         fields = b.shift.split('|').map(&:strip)
-        tables[:DEFAULT] = {
+        fail ArgumentError, "Unknown options: #{b.inspect}" if !b.empty?
+
+        t = {
           :name     => pieces.first,
           :out      => fields.first.to_sym,
           :in       => fields.last.to_sym,
           :unparsed => []
         }
+        t.default_proc = lambda { |h, k| fail ArgumentError, "Unknown key: #{k.inspect}" }
 
-        tables[:DEFAULT].default_proc = lambda { |h, k| fail ArgumentError, "Unknown key: #{k.inspect}" }
-
-        fail ArgumentError, "Unknown options: #{b.inspect}" if !b.empty?
+        tables[:DEFAULT] = t
 
       when pieces.size == 3 && first[' AS ']
         tables[pieces.last.to_sym] = {
+          :name       => pieces.last.to_sym,
           :real_table => pieces.first.to_sym,
           :unparsed   => b
         }
@@ -236,22 +244,13 @@ class I_Dig_Sql
         when l[GROUP_BY_REGEXP]
           (meta[:GROUP_BY] ||= []).concat l.split(GROUP_BY_REGEXP).last.split(COMMA).map(&:strip)
 
-        when l['FROM ']
-          (meta[:FROM] ||= []).concat l.split('FROM').last.split(COMMA).map(&:strip).map(&:to_sym)
-
-        when l['FOR ']
-          (meta[:FOR] ||= []).concat l.split('FOR ').last.split.map { |v|
-            v.sub(':', '').to_sym
-          }
-
-        when l['SELECT']
+        when %w{ FROM OF SELECT }.freeze.include?(clause = l.split.first)
+          (meta[clause.to_sym] ||= []).concat l.split(clause).last.split(COMMA).map(&:strip).map(&:to_sym)
           while meta[:unparsed].first && meta[:unparsed].first[DOWNCASE_START]
-            (meta[:SELECT] ||= []) << meta[:unparsed].shift
+            (meta[clause.to_sym] ||= []) << meta[:unparsed].shift
           end
 
         else
-          require "awesome_print"
-          ap tables, :indent=>-2
           fail "Programmer Error: Parsing rule not found for: #{l.inspect}"
 
         end # === case
@@ -263,8 +262,17 @@ class I_Dig_Sql
         fail ArgumentError, "Key not found: #{k.inspect}"
       }
 
-      @digs.push I_Dig_Sql.new(meta)
     } # === tables each
+
+    if tables[:DEFAULT]
+      @digs << I_Dig_Sql.new(:DEFAULT, tables[:DEFAULT])
+      tables.delete :DEFAULT
+    end
+
+    tables.each { |name, meta|
+      @digs << I_Dig_Sql.new(meta)
+    }
+
   end # === def describe
 
   # === LINK DSL ====================================================
@@ -370,11 +378,15 @@ class I_Dig_Sql
   # === Rendering DSL ===============================================
 
   def << str
-    @fragments << str
+    (@data[:raw] ||= "") << str
   end
 
   def to_pair
     [to_sql, vars]
+  end
+
+  def has_raw?
+    !!(@data[:raw] && !@data[:raw].strip.empty?)
   end
 
   def to_sql target_name = nil
@@ -384,9 +396,9 @@ class I_Dig_Sql
       WITH!:    nil
     }
 
-    fail ArgumentError, "No query defined." if !target_name && @fragments.empty?
+    fail ArgumentError, "No query defined." if !target_name && !has_raw?
 
-    fragments_to_raw(@fragments, final)
+    fragments_to_raw(@data[:raw], final)
     table_name_to_raw(target_name, final) if target_name
     with_to_raw(final)
 
@@ -669,16 +681,10 @@ class I_Dig_Sql
       size = withs.size
       case k
       when Symbol
-        meta = self[k]
-        if meta.is_a?(String)
-          compiled << "#{k} AS ( #{meta} )"
-        else
-          withs.unshift meta
-        end
+        withs.unshift self[k]
 
-      when Hash
-        compiled << "#{k[:name]} AS (#{meta_to_fragment(k, final)})"
-
+      when I_Dig_Sql
+        compiled << %^#{k.name} AS ( #{k.raw} )^
       else
         fail ArgumentError, "Unknown type for :WITH: #{k.class}"
       end
