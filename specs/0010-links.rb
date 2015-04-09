@@ -32,7 +32,7 @@ describe "links DSL" do
       out_in :pinner, :pub do
         are    :screen_name
         have   :owner_id
-        not_in :block
+        not_exists :block
       end
 
       order_by :created_at, :DESC
@@ -42,7 +42,7 @@ describe "links DSL" do
       out_in :fan, :star do
         are    :screen_name
         have   :owner_id
-        not_in :block
+        not_exists :block
       end
     end
 
@@ -66,6 +66,7 @@ describe "links DSL" do
     puts actual
     puts "################################"
 
+    fail
     sql(actual).should == "a"
   end # === it
 

@@ -98,6 +98,7 @@ class I_Dig_Sql
       :order_by   => [],
       :group_by   => [],
       :select     => [],
+      :where      => [],
       :from       => [],
       :type_ids   => [],
       :out        => nil,
@@ -106,8 +107,7 @@ class I_Dig_Sql
       :in_ftable  => nil,
       :out_has    => nil,
       :in_has     => nil,
-      :in_not_in  => nil,
-      :out_not_in => nil
+      :not_exists => nil
     )
     old = @current_def
     @current_def = @sqls[name]
@@ -140,10 +140,11 @@ class I_Dig_Sql
     self
   end
 
-  def not_in t
-    @out_in.each { |k|
-      @current_def["#{k}_not_in".to_sym] = t
-    }
+  def not_exists t
+    if (@out_in.size % 2) != 0
+      fail ArgumentError, "Currently, :not_exists can only be used within: out_in { }."
+    end
+    @current_def[:not_exists] = t
     self
   end
 
@@ -173,7 +174,7 @@ class I_Dig_Sql
 
   def type_id name
     old = @current_def
-    old[:type_ids] << {}
+    old[:type_ids] << {:name=>name}
     @current_def = old[:type_ids].last
     instance_eval(&Proc.new) if block_given?
     @current_def = old
@@ -217,6 +218,10 @@ class I_Dig_Sql
 
   private # ==========================================
 
+  def prefix_raw sym
+    "raw_#{sym.to_s.split('_').first}".to_sym
+  end
+
   def prefix sym
     sym.to_s.split('_').first.to_sym
   end
@@ -224,7 +229,7 @@ class I_Dig_Sql
   def table_name meta, k
     name = meta[:name]
     case k
-    when :out_ftable, :out_not_in, :in_ftable, :in_not_in
+    when :out_ftable, :in_ftable
       "#{name}_#{ meta[prefix(k)] }_#{meta[k]}"
     else
       fail ArgumentError, "Unknown key for table name: #{k.inspect}"
@@ -241,8 +246,12 @@ class I_Dig_Sql
       tname = meta[:name]
       k     = args.first
       case k
-      when :in, :out
-        "#{tname}.#{fields[k]}"
+      when :raw_in
+        "#{tname}.#{fields[:in]}"
+      when :raw_out
+        "#{tname}.#{fields[:out]}"
+      when :type_id
+        "#{tname}.#{k}"
       else
         "#{tname}.#{meta[k]}"
       end
@@ -335,12 +344,34 @@ class I_Dig_Sql
 
       when :where
 
-        if meta[:out_not_in]
-          fail
-        end
+        sql[:WHERE].concat meta[:where]
 
-        if meta[:in_not_in]
-          fail
+        sql[:WHERE] << "#{field meta, :type_id} = :#{meta[:name].to_s.upcase}_TYPE_ID"
+
+        if meta[:not_exists]
+          block = self[meta[:not_exists]]
+            w = ""
+            w << %^NOT EXISTS (\n^
+            w << %^  SELECT 1\n^
+            w << %^  FROM #{meta[:not_exists]}\n^
+            w << %^  WHERE\n^
+            conds = []
+            block[:type_ids].each { |block|
+              [[:raw_out, :raw_in], [:raw_in, :raw_out]].each { |pair|
+                c = ""
+                c << %^  (\n^
+                c << "    #{field meta, pair.first} = #{block[:out]}\n"
+                c << "    AND\n"
+                c << "    #{meta[:not_exists]}.type_id = #{block[:name].inspect}_TYPE_ID\n"
+                c << "    AND\n"
+                c << "    #{field meta, pair.last} = #{block[:in]}\n"
+                c << %^  )\n^
+                conds << c
+              }
+            }
+
+            w << conds.join("  OR\n")
+            sql[:WHERE] << w
         end
 
       when :from
@@ -353,13 +384,13 @@ class I_Dig_Sql
           table = self[k]
 
           if !last
-            string << k.to_s
+            string << (meta[:from].empty? ? "link AS #{k}" : k.to_s)
 
             [:out_ftable, :in_ftable].each { |ftable|
               if meta[ftable]
                 final[:WITH] << meta[ftable]
                 string << %^\n  LEFT JOIN #{meta[ftable]} AS #{table_name meta, ftable}^
-                string << %^\n    ON #{field meta, prefix(ftable)} = #{meta[ftable]}.id^
+                string << %^\n    ON #{field meta, prefix_raw(ftable)} = #{meta[ftable]}.id^
               end
             }
 
@@ -401,7 +432,7 @@ class I_Dig_Sql
     s << %^FROM\n  #{sql[:FROM].join "\n  "}\n^
 
     if !sql[:WHERE].empty?
-      s << %^WHERE\n  #{sql[:WHERE].join "\n"}\n^
+      s << %^WHERE\n  #{sql[:WHERE].join "\nAND\n"}\n^
     end
 
     if !sql[:ORDER_BY].empty?
