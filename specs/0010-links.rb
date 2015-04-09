@@ -19,12 +19,17 @@ describe "links DSL" do
         have :owner_id
       }
 
-      type_id(:BLOCK_SCREEN) {
-        out_in(:owner_id, :victim)
-      }
-
-      type_id(:BLOCK_OWNER) {
-        out_in(:owner_id, :owner_id)
+      %w[SCREEN OWNER].each { |x|
+        where(%{
+                        BLOCK_#{x}
+            ________  raw        ________    raw
+            owner_id  ______     owner_id    ______
+        })
+        .or(%{
+                        BLOCK_#{x}
+          ________  owner_id     owner_id    ______
+          raw       ______        ________    raw
+        })
       }
     end
 

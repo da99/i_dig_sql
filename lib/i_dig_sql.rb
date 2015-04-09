@@ -172,14 +172,23 @@ class I_Dig_Sql
     @current_def[:of] = name
   end
 
-  def type_id name
-    old = @current_def
-    old[:type_ids] << {:name=>name}
-    @current_def = old[:type_ids].last
-    instance_eval(&Proc.new) if block_given?
-    @current_def = old
+  ALL_UNDERSCORE = /\A[_]+\Z/
+  COMBO_LEFT_RIGHT = [:left, :left, :right, :right]
+  COMBO_OUT_IN     = [:out, :in, :out, :in]
+  def where str
+    _and_ = []
+    lines = str.strip.split("\n")
+    _and_ << lines.shift
+    lines.map { |line|
+      line.split.each_with_index { |k, i|
+        next if k[ALL_UNDERSCORE]
+        _and_ << [COMBO_LEFT_RIGHT[i], COMBO_OUT_IN[i], k.to_sym]
+      }
+    }
+    @current_def[:where] << _and_
     self
   end
+  alias_method :or, :where
   # =================================================================
 
   # === Rendering DSL ===============================================
@@ -236,13 +245,34 @@ class I_Dig_Sql
     end
   end
 
+  #
+  # Example:
+  #   field meta, :in, :owner_id
+  #   field meta, :screen_name, :screen_name
+  #   field meta, :in
+  #   field meta, :raw_in
   def field meta, *args
     case args.size
+
     when 2
-      tname = table_name(meta, args.first)
-      k     = args.last
-      "#{tname}.#{k}"
-    when 1
+      if args.first == :in || args.first == :out
+        io, k = args
+        case
+        when meta[:"#{io}_has"] == k
+          tname = table_name(meta, :"#{io}_ftable")
+          "#{tname}.#{k}"
+        when k == :raw
+          field meta, :"raw_#{io}"
+        else
+          fail ArgumentError, "Unknown args for key: #{args.inspect}"
+        end
+      else
+        tname = table_name(meta, args.first)
+        k     = args.last
+        "#{tname}.#{k}"
+      end
+
+    when 1, 3
       tname = meta[:name]
       k     = args.first
       case k
@@ -253,12 +283,18 @@ class I_Dig_Sql
       when :type_id
         "#{tname}.#{k}"
       else
-        "#{tname}.#{meta[k]}"
+        if meta.has_key? k
+          "#{tname}.#{meta[k]}"
+        else
+          puts meta.inspect
+          "unknown"
+        end
       end
 
     else
       fail ArgumentError, "Unknown args: #{args.inspect}"
-    end
+
+    end # === case
   end
 
   def fragments_to_raw str_or_arr, final = {:WITH=>[], :RAW=>[]}
@@ -350,28 +386,28 @@ class I_Dig_Sql
 
         if meta[:not_exists]
           block = self[meta[:not_exists]]
-            w = ""
-            w << %^  NOT EXISTS (\n^
-            w << %^    SELECT 1\n^
-            w << %^    FROM #{meta[:not_exists]}\n^
-            w << %^    WHERE\n^
-            conds = []
-            block[:type_ids].each { |block|
-              [[:raw_out, :raw_in], [:raw_in, :raw_out]].each { |pair|
-                c = ""
-                c << %^    (\n^
-                c << "      #{field meta, pair.first} = #{block[:out]}\n"
-                c << "      AND\n"
-                c << "      #{meta[:not_exists]}.type_id = #{block[:name].inspect}_TYPE_ID\n"
-                c << "      AND\n"
-                c << "      #{field meta, pair.last} = #{block[:in]}\n"
-                c << %^    )\n^
-                conds << c
-              }
-            }
+          w = ""
+          w << %^  NOT EXISTS (\n^
+          w << %^    SELECT 1\n^
+          w << %^    FROM #{meta[:not_exists]}\n^
+          w << %^    WHERE\n^
 
-            w << conds.join("    OR\n")
-            sql[:WHERE] << w
+          conds = []
+          block[:where].each { |block_meta|
+            type_id = block_meta.first
+            c = ""
+            c << %^    (\n^
+            c << "      #{field meta, block_meta[1][1], block_meta[1][2]} = #{field block, block_meta[2][1], block_meta[2][2]}\n"
+            c << "      AND\n"
+            c << "      #{meta[:not_exists]}.type_id = :#{type_id}_TYPE_ID\n"
+            c << "      AND\n"
+            c << "      #{field meta, block_meta[3][1], block_meta[3][2]} = #{field block, block_meta[4][1], block_meta[4][2]}\n"
+            c << %^    )\n^
+            conds << c
+          }
+
+          w << conds.join("    OR\n")
+          sql[:WHERE] << w
         end
 
       when :from
