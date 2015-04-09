@@ -1,74 +1,11 @@
 
+require "i_dig_sql/H"
+
 class I_Dig_Sql
 
   include Enumerable
+
   HAS_VAR = /(\{\{|\<\<)[^\}\>]+(\}\}|\>\>)/
-
-  Duplicate = Class.new RuntimeError
-
-  class << self
-  end # === class self ===
-
-  class H < Hash
-
-    def initialize *options
-      @h_option = {}
-      options.each { |name|
-        case name
-        when :allow_update
-          @h_option[:allow_update] = true
-        else
-          fail ArgumentError, "Unknown option: #{name.inspect}"
-        end
-      }
-
-      super()
-    end
-
-    def [] name
-      fail ArgumentError, "Unknown key: #{name.inspect}" unless has_key?(name)
-      super
-    end
-
-    def []= name, val
-      if has_key?(name) && self[name] != val && !@h_option[:allow_update]
-        fail ArgumentError, "Key already set: #{name.inspect}"
-      end
-
-      super
-    end
-
-    def merge_these *args
-      args.each { |h|
-        h.each { |k,v|
-          self[k] = v
-        }
-      }
-      self
-    end
-
-  end # === class H
-
-  attr_reader :sqls, :vars
-  def initialize *args
-    @digs = args.select { |a|
-      a.is_a? I_Dig_Sql
-    }
-
-    @sqls   = H.new
-    @vars   = H.new
-    @fields = H.new
-
-    @current_def  = nil
-
-    @sqls.merge_these *(@digs.map(&:sqls))
-    @vars.merge_these *(@digs.map(&:vars))
-
-    @fragments = (
-      args
-      .select { |s| s.is_a? String }
-    )
-  end
 
   NEW_LINE             = "\n"
   IS_COMMENT_REGEXP    = /\A\s*\#/
@@ -81,6 +18,80 @@ class I_Dig_Sql
   GROUP_BY_REGEXP      = /GROUP\s+BY\s+/
   UPCASE_START         = /\A[A-Z]/
   DOWNCASE_START       = /\A[^A-Z]/
+
+  Duplicate = Class.new RuntimeError
+
+  class << self
+  end # === class self ===
+
+  def initialize *args
+    @digs   = []
+    @data   = H.new(:allow_update).merge!(
+      :name=>nil,
+      :raw=>nil,
+      :vars=>H.new
+    )
+
+    args.each { |a|
+      case
+      when Symbol
+        @data[:name] = a
+      when I_Dig_Sql
+        (@digs ||= []) << a
+      when String
+        @data[:raw] = a
+      when Hash, H
+        if a.has_key?(:name) && a.has_key?(:real_table)
+          @data.merge! a
+        else
+          @data[:vars].merge! a
+        end
+      else
+        fail ArgumentError, "Unknown arg: #{a.inspect}"
+      end
+    }
+  end # === def initialize
+
+  %w{name vars}.each { |k|
+    eval <<-EOF.strip, nil, __FILE__, __LINE__
+      def #{k}
+        @data[:k]
+      end
+    EOF
+  }
+
+  def has_key? name
+    return true if @raw == name
+    !!(
+      @digs.reverse.detect { |d|
+        d.has_key?(d)
+      }
+    )
+  end
+
+  def [] name
+    return @raw if @name == name
+    found = @digs.reverse.detect { |d|
+      d.has_key?(name)
+    }
+    fail ArgumentError, "SQL not found for: #{name.inspect}" unless found
+    found[name]
+  end
+
+  def []= name, val
+    fail ArgumentError, "Name already taken: #{name.inspect}" if has_key?(name)
+    @digs.push(I_Dig_Sql.new name, val)
+  end
+
+  def each
+    digs = @digs.reverse
+    digs.unshift self
+    if block_given?
+      digs.each { |d| yield d.name, d }
+    else
+      digs.each
+    end
+  end
 
   def IS_COMBO l
     l[IS_COMBO_REGEXP]
@@ -102,7 +113,12 @@ class I_Dig_Sql
     l[NOT_EXISTS_REGEXP]
   end
 
-  def describe str
+  def def name, str = nil
+    if name && !str
+      str  = name
+      name = nil
+    end
+
     blocks = []
     last   = nil
     lines  = str.split(NEW_LINE)
@@ -131,10 +147,27 @@ class I_Dig_Sql
 
     blocks.each { |b|
 
-      first  = b.shift
-      pieces = first.split
+      if name
+        first  = name
+        pieces = []
+      else
+        first  = b.shift
+        pieces = first.to_s.split
+      end
 
       case
+
+      when first.is_a?(Symbol)
+        tables[first] = {
+          :real_table => first,
+          :unparsed   => b
+        }
+
+      when pieces.size == 1
+        tables[first.to_sym] = {
+          :real_table => first.to_sym,
+          :unparsed   => b
+        }
 
       when first['DEFAULT']
         fields = b.shift.split('|').map(&:strip)
@@ -148,12 +181,6 @@ class I_Dig_Sql
         tables[:DEFAULT].default_proc = lambda { |h, k| fail ArgumentError, "Unknown key: #{k.inspect}" }
 
         fail ArgumentError, "Unknown options: #{b.inspect}" if !b.empty?
-
-      when pieces.size == 1
-        tables[first.to_sym] = {
-          :real_table => first.to_sym,
-          :unparsed   => b
-        }
 
       when pieces.size == 3 && first[' AS ']
         tables[pieces.last.to_sym] = {
@@ -235,36 +262,13 @@ class I_Dig_Sql
       meta.default_proc = lambda { |h, k|
         fail ArgumentError, "Key not found: #{k.inspect}"
       }
-    } # === tables each
 
-    require "awesome_print"
-    ap tables, :indent=>-2
-    fail "DONE"
+      @digs.push I_Dig_Sql.new(meta)
+    } # === tables each
   end # === def describe
 
-  def fields h = nil
-    return @fields unless h
-    @fields.merge! h
-  end
-
-  def [] name
-    @sqls[name]
-  end
-
-  def []= name, val
-    @sqls[name] = val
-  end
-
-  def each
-    if block_given?
-      @sqls.each { |k, v| yield k, v }
-    else
-      @sqls.each
-    end
-  end
-
   # === LINK DSL ====================================================
-  def def name
+  def _def name
     @sqls[name] = H.new(:allow_update).merge!(
       :name       => name,
       :order_by   => [],

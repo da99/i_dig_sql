@@ -4,8 +4,7 @@ describe "links DSL" do
   it "runs" do
     sql = I_Dig_Sql.new
 
-    sql.describe(
-    <<-EOF
+    sql.def(<<-EOF
 
              link AS DEFAULT
           asker_id |  giver_id
