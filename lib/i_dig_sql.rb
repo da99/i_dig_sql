@@ -351,26 +351,26 @@ class I_Dig_Sql
         if meta[:not_exists]
           block = self[meta[:not_exists]]
             w = ""
-            w << %^NOT EXISTS (\n^
-            w << %^  SELECT 1\n^
-            w << %^  FROM #{meta[:not_exists]}\n^
-            w << %^  WHERE\n^
+            w << %^  NOT EXISTS (\n^
+            w << %^    SELECT 1\n^
+            w << %^    FROM #{meta[:not_exists]}\n^
+            w << %^    WHERE\n^
             conds = []
             block[:type_ids].each { |block|
               [[:raw_out, :raw_in], [:raw_in, :raw_out]].each { |pair|
                 c = ""
-                c << %^  (\n^
-                c << "    #{field meta, pair.first} = #{block[:out]}\n"
-                c << "    AND\n"
-                c << "    #{meta[:not_exists]}.type_id = #{block[:name].inspect}_TYPE_ID\n"
-                c << "    AND\n"
-                c << "    #{field meta, pair.last} = #{block[:in]}\n"
-                c << %^  )\n^
+                c << %^    (\n^
+                c << "      #{field meta, pair.first} = #{block[:out]}\n"
+                c << "      AND\n"
+                c << "      #{meta[:not_exists]}.type_id = #{block[:name].inspect}_TYPE_ID\n"
+                c << "      AND\n"
+                c << "      #{field meta, pair.last} = #{block[:in]}\n"
+                c << %^    )\n^
                 conds << c
               }
             }
 
-            w << conds.join("  OR\n")
+            w << conds.join("    OR\n")
             sql[:WHERE] << w
         end
 
@@ -432,7 +432,7 @@ class I_Dig_Sql
     s << %^FROM\n  #{sql[:FROM].join "\n  "}\n^
 
     if !sql[:WHERE].empty?
-      s << %^WHERE\n  #{sql[:WHERE].join "\nAND\n"}\n^
+      s << %^WHERE\n  #{sql[:WHERE].join "\n  AND\n"}\n^
     end
 
     if !sql[:ORDER_BY].empty?
