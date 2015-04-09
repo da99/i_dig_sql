@@ -10,30 +10,21 @@ describe "links DSL" do
              link AS DEFAULT
           asker_id |  giver_id
 
-          # sql.fields(
-            # :out => :asker_id,
-            # :in  => :giver_id
-          # )
-
               screen_name
             id, screen_name
-
-        # sql[:screen_name] = %^
-          # SELECT * FROM screen_name
-        # ^
 
                        block
                 blocked  |  victim
              screen_name | screen_name
    BLOCK_SCREEN_TYPE_ID || BLOCK_OWNER_TYPE_ID
-    ________  raw        ________    raw
-    owner_id  ______     owner_id    ______
-    ________  owner_id     owner_id    ______
-    raw       ______        ________    raw
+        ________  raw    |   ________    raw
+      owner_id  ______   | owner_id    ______
+    ________  owner_id   | owner_id    ______
+    raw       ______     |  ________    raw
 
                   post
             pinner | pub
-        screen_name|screen_name
+       screen_name | screen_name, computer
            NOT EXISTS block
         ORDER BY created_at DESC
 
@@ -44,56 +35,15 @@ describe "links DSL" do
              NOT EXISTS block
 
                  feed
-          FROM
-            follow, post
-          WHERE
-            follow.fan = :audience_ID
+          FROM follow, post
+          FOR  :audience_id
           GROUP BY follow.star
           SELECT
-            follow_star_screen_name,
+            follow.star_screen_name,
             post.*
-            max(post.pub.created_at)
+            max(post.computer_created_at)
     EOF
     )
-
-
-    # sql.def(:block) do
-      # out_in(:blocked, :victim) {
-        # are  :screen_name
-        # have :owner_id
-      # }
-
-      # %w[SCREEN OWNER].each { |x|
-        # where(%{
-                        # BLOCK_#{x}
-            # ________  raw        ________    raw
-            # owner_id  ______     owner_id    ______
-        # })
-        # .or(%{
-                        # BLOCK_#{x}
-          # ________  owner_id     owner_id    ______
-          # raw       ______        ________    raw
-        # })
-      # }
-    # end
-
-    # sql.def(:post) do
-      # out_in :pinner, :pub do
-        # are    :screen_name
-        # have   :owner_id
-        # not_exists :block
-      # end
-
-      # order_by :created_at, :DESC
-    # end
-
-    # sql.def(:follow) do
-      # out_in :fan, :star do
-        # are    :screen_name
-        # have   :owner_id
-        # not_exists :block
-      # end
-    # end
 
     # sql.def(:feed) do
 
