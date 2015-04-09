@@ -11,13 +11,27 @@ class I_Dig_Sql
 
   class H < Hash
 
+    def initialize *options
+      @h_option = {}
+      options.each { |name|
+        case name
+        when :allow_update
+          @h_option[:allow_update] = true
+        else
+          fail ArgumentError, "Unknown option: #{name.inspect}"
+        end
+      }
+
+      super()
+    end
+
     def [] name
       fail ArgumentError, "Unknown key: #{name.inspect}" unless has_key?(name)
       super
     end
 
     def []= name, val
-      if has_key?(name) && self[name] != val
+      if has_key?(name) && self[name] != val && !@h_option[:allow_update]
         fail ArgumentError, "Key already set: #{name.inspect}"
       end
 
@@ -41,8 +55,9 @@ class I_Dig_Sql
       a.is_a? I_Dig_Sql
     }
 
-    @sqls = H.new
-    @vars = H.new
+    @sqls   = H.new
+    @vars   = H.new
+    @fields = H.new
 
     @current_def  = nil
 
@@ -53,6 +68,11 @@ class I_Dig_Sql
       args
       .select { |s| s.is_a? String }
     )
+  end
+
+  def fields h = nil
+    return @fields unless h
+    @fields.merge! h
   end
 
   def [] name
@@ -71,55 +91,23 @@ class I_Dig_Sql
     end
   end
 
-  def << str
-    @fragments << str
-  end
-
-  def to_pair
-    [to_sql, vars]
-  end
-
-  def to_sql target_name = nil
-    final = {
-      WITH:     [],
-      RAW:      [],
-      WITH!:    nil
-    }
-
-    fail ArgumentError, "No query defined." if !target_name && @fragments.empty?
-
-    fragments_to_raw(@fragments, final)
-    table_name_to_raw(target_name, final) if target_name
-    with_to_raw(final)
-
-    string = ""
-
-    if !final[:WITH!].empty?
-      string << (%^WITH\n  #{final[:WITH!].join ",\n  "}\n^)
-    end
-
-    string << (final[:RAW].join "\n")
-
-    string
-  end # === def to_sql
-
   # === LINK DSL ====================================================
   def def name
-    @sqls[name] = H.new.merge!(
+    @sqls[name] = H.new(:allow_update).merge!(
       :name       => name,
       :order_by   => [],
       :group_by   => [],
       :select     => [],
       :from       => [],
-      :type_ids   => []
-      # :out        => nil,
-      # :in         => nil,
-      # :out_ftable => nil,
-      # :in_ftable  => nil,
-      # :out_has    => nil,
-      # :in_has     => nil,
-      # :in_not_in  => nil,
-      # :out_not_in => nil
+      :type_ids   => [],
+      :out        => nil,
+      :in         => nil,
+      :out_ftable => nil,
+      :in_ftable  => nil,
+      :out_has    => nil,
+      :in_has     => nil,
+      :in_not_in  => nil,
+      :out_not_in => nil
     )
     old = @current_def
     @current_def = @sqls[name]
@@ -195,6 +183,75 @@ class I_Dig_Sql
 
   # === Rendering DSL ===============================================
 
+  def << str
+    @fragments << str
+  end
+
+  def to_pair
+    [to_sql, vars]
+  end
+
+  def to_sql target_name = nil
+    final = {
+      WITH:     [],
+      RAW:      [],
+      WITH!:    nil
+    }
+
+    fail ArgumentError, "No query defined." if !target_name && @fragments.empty?
+
+    fragments_to_raw(@fragments, final)
+    table_name_to_raw(target_name, final) if target_name
+    with_to_raw(final)
+
+    string = ""
+
+    if !final[:WITH!].empty?
+      string << (%^WITH\n  #{final[:WITH!].join ",\n  "}\n^)
+    end
+
+    string << (final[:RAW].join "\n")
+
+    string
+  end # === def to_sql
+
+  private # ==========================================
+
+  def prefix sym
+    sym.to_s.split('_').first.to_sym
+  end
+
+  def table_name meta, k
+    name = meta[:name]
+    case k
+    when :out_ftable, :out_not_in, :in_ftable, :in_not_in
+      "#{name}_#{ meta[prefix(k)] }_#{meta[k]}"
+    else
+      fail ArgumentError, "Unknown key for table name: #{k.inspect}"
+    end
+  end
+
+  def field meta, *args
+    case args.size
+    when 2
+      tname = table_name(meta, args.first)
+      k     = args.last
+      "#{tname}.#{k}"
+    when 1
+      tname = meta[:name]
+      k     = args.first
+      case k
+      when :in, :out
+        "#{tname}.#{fields[k]}"
+      else
+        "#{tname}.#{meta[k]}"
+      end
+
+    else
+      fail ArgumentError, "Unknown args: #{args.inspect}"
+    end
+  end
+
   def fragments_to_raw str_or_arr, final = {:WITH=>[], :RAW=>[]}
     raws = if str_or_arr.is_a?(String)
              [str_or_arr]
@@ -256,15 +313,14 @@ class I_Dig_Sql
     }
 
     [
+      :of,
       :name,
 
       :order_by,
       :group_by,
       :from,
       :select,
-
-      :in,
-      :of
+      :where
     ].each { |k|
       case k
 
@@ -273,26 +329,66 @@ class I_Dig_Sql
       when :select
         sql[:SELECT].concat(meta[:select] || ['*'])
 
-      when :from
-        final[:WITH].concat meta[:from]
-        sql[:FROM].concat meta[:from]
-
       when :of
         next unless meta.has_key?(:of)
         sql[:WHERE] << %^#{meta[:from].first}.owner_id = #{meta[:of].inspect}^
 
+      when :where
+
+        if meta[:out_not_in]
+          fail
+        end
+
+        if meta[:in_not_in]
+          fail
+        end
+
+      when :from
+
+        last = nil
+
+        (meta[:from].empty? ? [meta[:name]] : meta[:from]).each_with_index { |k, i|
+          string = ""
+          final[:WITH] << k
+          table = self[k]
+
+          if !last
+            string << k.to_s
+
+            [:out_ftable, :in_ftable].each { |ftable|
+              if meta[ftable]
+                final[:WITH] << meta[ftable]
+                string << %^\n  LEFT JOIN #{meta[ftable]} AS #{table_name meta, ftable}^
+                string << %^\n    ON #{field meta, prefix(ftable)} = #{meta[ftable]}.id^
+              end
+            }
+
+          else
+            string << %^\n  INNER JOIN #{table[:name]}\n^
+            string << %^    ON #{ field last, :in } = #{ field table, :out }^
+          end # === if !last
+
+          sql[:FROM] << string
+          last = table
+
+        } # === meta each_with_index
+
       when :order_by
+        sql[:ORDER_BY].concat(
+          meta[:order_by].map { |unknown|
+            case unknown
+            when Array
+              unknown.join ' '.freeze
+            when String
+              unknown
+            else
+              fail ArgumentError, "Unknown type for :order_by: #{unknown.class}"
+            end
+          }
+        )
 
       when :group_by
         sql[:GROUP_BY].concat meta[:group_by]
-
-      when :in
-        next unless meta.has_key?(:in)
-        final[:RAW] <<(
-          meta.map { |k,v|
-            "#{k}: #{v.inspect}"
-          }.join ",\n    "
-        )
 
       else
         fail "Programmer Error: unknown key #{k.inspect}"
@@ -302,7 +398,7 @@ class I_Dig_Sql
 
     s = ""
     s << %^SELECT\n  #{sql[:SELECT].join ",\n  "}\n^
-    s << %^FROM\n  #{sql[:FROM].join ",\n  "}\n^
+    s << %^FROM\n  #{sql[:FROM].join "\n  "}\n^
 
     if !sql[:WHERE].empty?
       s << %^WHERE\n  #{sql[:WHERE].join "\n"}\n^
@@ -327,6 +423,7 @@ class I_Dig_Sql
     while k = withs.shift
       next if used.include?(k)
 
+      size = withs.size
       case k
       when Symbol
         meta = self[k]
@@ -337,12 +434,17 @@ class I_Dig_Sql
         end
 
       when Hash
-        k
+        compiled << "#{k[:name]} AS (#{meta_to_fragment(k, final)})"
 
       else
         fail ArgumentError, "Unknown type for :WITH: #{k.class}"
       end
+
       used << k
+
+      if size != final[:WITH].size
+        withs.concat final[:WITH]
+      end
     end # === while
 
     final[:WITH!] = compiled

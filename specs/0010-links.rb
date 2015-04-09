@@ -4,6 +4,11 @@ describe "links DSL" do
   it "runs" do
     sql = I_Dig_Sql.new
 
+    sql.fields(
+      :out => :asker_id,
+      :in  => :giver_id
+    )
+
     sql[:screen_name] = %^
       SELECT * FROM screen_name
     ^
