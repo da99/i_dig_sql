@@ -106,9 +106,45 @@ class I_Dig_Sql
       end
     end # === while
 
-    require 'pp'
-    pp blocks
-    fail blocks.inspect
+    tables = {}
+
+    blocks.each { |b|
+
+      first  = b.shift
+      pieces = first.split
+
+      case
+
+      when first['DEFAULT']
+        fields = b.shift.split('|').map(&:strip)
+        tables[:DEFAULT] = {
+          :name => pieces.first,
+          :out  => fields.first.to_sym,
+          :in   => fields.last.to_sym
+        }
+        fail ArgumentError, "Unknown options: #{b.inspect}" if !b.empty?
+
+      when pieces.size == 1
+        tables[first.to_sym] = {
+          :real_table => first.to_sym,
+          :unparsed   => b
+        }
+
+      when pieces.size == 3 && first[' AS ']
+        tables[pieces.last.to_sym] = {
+          :real_table => pieces.first.to_sym,
+          :unparsed   => b
+        }
+
+      else
+        fail "Programmer Error: unknown parsing rule for: #{first.inspect}"
+
+      end # === case
+    }
+
+    require "awesome_print"
+    ap tables
+    fail "DONE"
   end # === def describe
 
   def fields h = nil
