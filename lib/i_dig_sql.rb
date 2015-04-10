@@ -324,8 +324,25 @@ class I_Dig_Sql
   end # === fragments_to_raw
 
   def compile_meta
+    @SQL = %^
+      SELECT
+        #{SELECT()}
+      FROM
+        #{FROM()}
+      WHERE
+        #{WHERE()}
+    ^
+    [:ORDER_BY, :GROUP_BY, :LIMIT, :OFFSET].each { |name|
+      next unless @data.has_key?(name)
+      @SQL << "\n" << %^
+        #{name.to_s.sub('_', ' ')} #{@data[name].join ', '}
+      ^
+    }
+
     aputs @data
-    aputs self[:block].data
+    @SQL.split("\n").each { |line|
+      aputs line
+    }
     fail "NOT rEADY"
 
     k = nil
@@ -441,6 +458,24 @@ class I_Dig_Sql
 
     s
   end # === def compile_meta
+
+  def SELECT
+    selects = @data[:SELECT]
+    if selects.empty?
+      "*"
+    else
+      selects.join ",\n   "
+    end
+  end # === def SELECT
+
+  def FROM
+    @data[:FROM].join ", "
+  end # === def FROM
+
+  def WHERE
+    wheres = @data[:WHERE]
+    wheres.join "\n"
+  end
 
   def with_to_raw final
     withs    = final[:WITH].dup
