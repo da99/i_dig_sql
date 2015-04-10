@@ -169,8 +169,8 @@ class I_Dig_Sql
     [to_sql, vars!]
   end
 
-  def to_meta
-    compile
+  def to_meta *args
+    compile *args
   end
 
   def to_sql *args
@@ -185,56 +185,8 @@ class I_Dig_Sql
       end
     EOF
   }
+
   private # ==========================================
-
-  def compile target = nil
-    if !@SQL
-      has_raw? ?  compile_raw : compile_meta
-
-      @WITH = if @WITHS.empty?
-                ""
-              else
-                withs = @WITHS.compact.uniq
-                withs = (withs + withs.map { |k| self[k].to_meta[:WITHS] }).
-                  flatten.
-                  compact.
-                  uniq
-                str = withs.map { |k| "#{k} AS ( #{self[k].FRAGMENT} )" }.join ",\n  "
-                %{WITH\n  #{str}\n}
-              end
-      @SQL = [@WITH, @FRAGMENT].compact.join NEW_LINE
-    end
-
-    {FRAGMENT: @FRAGMENT, SQL: @SQL, WITH: @WITH, VARS: vars!}
-  end # === def to_sql
-
-  def compile_raw
-    @data[:raw].freeze
-
-    s = @FRAGMENT = @data[:raw].dup
-
-    while s[HAS_VAR] 
-      s.gsub!(/\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
-        key = $1.to_sym
-        @WITHS << key
-        key
-      end
-
-      s.gsub!(/\<\<\s?([a-zA-Z0-9\_\-\ \*]+)\s?\>\>/) do |match|
-        tokens = $1.split
-        key    = tokens.pop.to_sym
-        field  = tokens.empty? ? nil : tokens.join(' ')
-
-        case
-        when field
-          @WITHS << key
-          "SELECT #{field} FROM #{key}"
-        else
-          self[key].to_sql
-        end
-      end
-    end # === while s HAS_VAR
-  end # === fragments_to_raw
 
   def prefix_raw sym
     "raw_#{sym.to_s.split('_').first}".to_sym
@@ -244,8 +196,8 @@ class I_Dig_Sql
     sym.to_s.split('_').first.to_sym
   end
 
-  def table_name meta, k
-    name = meta[:name]
+  def table_name k
+    name = @data[:real_table]
     case k
     when :out_ftable, :in_ftable
       "#{name}_#{ meta[prefix(k)] }_#{meta[k]}"
@@ -256,11 +208,12 @@ class I_Dig_Sql
 
   #
   # Example:
-  #   field meta, :in, :owner_id
-  #   field meta, :screen_name, :screen_name
-  #   field meta, :in
-  #   field meta, :raw_in
-  def field meta, *args
+  #   field :in, :owner_id
+  #   field :screen_name, :screen_name
+  #   field :in
+  #   field :raw_in
+  def field *args
+    meta = @data
     case args.size
 
     when 2
@@ -318,120 +271,156 @@ class I_Dig_Sql
     final[:RAW] << meta_to_fragment(target, final)
   end
 
-  def meta_to_fragment meta, final
-    sql = {
-      :SELECT   => [],
-      :FROM     => [],
-      :WHERE    => [],
-      :ORDER_BY => [],
-      :GROUP_BY => []
-    }
+  protected def compile *args
+    return(self[*args].compile) if args.first && args.first != name
 
-    [
-      :of,
-      :name,
+    if !@SQL
 
-      :order_by,
-      :group_by,
-      :from,
-      :select,
-      :where
-    ].each { |k|
-      case k
+      has_raw? && args.empty? ? compile_raw : compile_meta(*args)
 
-      when :name
-
-      when :select
-        sql[:SELECT].concat(meta[:select] || ['*'])
-
-      when :of
-        next unless meta.has_key?(:of)
-        sql[:WHERE] << %^#{meta[:from].first}.owner_id = #{meta[:of].inspect}^
-
-      when :where
-
-        sql[:WHERE].concat meta[:where]
-
-        sql[:WHERE] << "#{field meta, :type_id} = :#{meta[:name].to_s.upcase}_TYPE_ID"
-
-        if meta[:not_exists]
-          block = self[meta[:not_exists]]
-          w = ""
-          w << %^  NOT EXISTS (\n^
-          w << %^    SELECT 1\n^
-          w << %^    FROM #{meta[:not_exists]}\n^
-          w << %^    WHERE\n^
-
-          conds = []
-          block[:where].each { |block_meta|
-            type_id = block_meta.first
-            c = ""
-            c << %^    (\n^
-            c << "      #{field meta, block_meta[1][1], block_meta[1][2]} = #{field block, block_meta[2][1], block_meta[2][2]}\n"
-            c << "      AND\n"
-            c << "      #{meta[:not_exists]}.type_id = :#{type_id}_TYPE_ID\n"
-            c << "      AND\n"
-            c << "      #{field meta, block_meta[3][1], block_meta[3][2]} = #{field block, block_meta[4][1], block_meta[4][2]}\n"
-            c << %^    )\n^
-            conds << c
-          }
-
-          w << conds.join("    OR\n")
-          sql[:WHERE] << w
-        end
-
-      when :from
-
-        last = nil
-
-        (meta[:from].empty? ? [meta[:name]] : meta[:from]).each_with_index { |k, i|
-          string = ""
-          final[:WITH] << k
-          table = self[k]
-
-          if !last
-            string << (meta[:from].empty? ? "link AS #{k}" : k.to_s)
-
-            [:out_ftable, :in_ftable].each { |ftable|
-              if meta[ftable]
-                final[:WITH] << meta[ftable]
-                string << %^\n  LEFT JOIN #{meta[ftable]} AS #{table_name meta, ftable}^
-                string << %^\n    ON #{field meta, prefix_raw(ftable)} = #{meta[ftable]}.id^
+      @WITH = if @WITHS.empty?
+                ""
+              else
+                withs = @WITHS.compact.uniq
+                withs = (withs + withs.map { |k| self[k].to_meta[:WITHS] }).
+                  flatten.
+                  compact.
+                  uniq
+                str = withs.map { |k| "#{k} AS ( #{self[k].FRAGMENT} )" }.join ",\n  "
+                %{WITH\n  #{str}\n}
               end
-            }
+      @SQL = [@WITH, @FRAGMENT].compact.join NEW_LINE
+    end
 
-          else
-            string << %^\n  INNER JOIN #{table[:name]}\n^
-            string << %^    ON #{ field last, :in } = #{ field table, :out }^
-          end # === if !last
+    {FRAGMENT: @FRAGMENT, SQL: @SQL, WITH: @WITH, VARS: vars!}
+  end # === def to_sql
 
-          sql[:FROM] << string
-          last = table
+  def compile_raw
+    @data[:raw].freeze
 
-        } # === meta each_with_index
+    s = @FRAGMENT = @data[:raw].dup
 
-      when :order_by
-        sql[:ORDER_BY].concat(
-          meta[:order_by].map { |unknown|
-            case unknown
-            when Array
-              unknown.join ' '.freeze
-            when String
-              unknown
-            else
-              fail ArgumentError, "Unknown type for :order_by: #{unknown.class}"
+    while s[HAS_VAR] 
+      s.gsub!(/\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
+        key = $1.to_sym
+        @WITHS << key
+        key
+      end
+
+      s.gsub!(/\<\<\s?([a-zA-Z0-9\_\-\ \*]+)\s?\>\>/) do |match|
+        tokens = $1.split
+        key    = tokens.pop.to_sym
+        field  = tokens.empty? ? nil : tokens.join(' ')
+
+        case
+        when field
+          @WITHS << key
+          "SELECT #{field} FROM #{key}"
+        else
+          self[key].to_sql
+        end
+      end
+    end # === while s HAS_VAR
+  end # === fragments_to_raw
+
+  def compile_meta
+    aputs @data
+    fail "NOT rEADY"
+
+    k = nil
+    case k
+
+    when :name
+
+    when :select
+      sql[:SELECT].concat(meta[:select] || ['*'])
+
+    when :of
+      sql[:WHERE] << %^#{meta[:from].first}.owner_id = #{meta[:of].inspect}^
+
+    when :where
+
+      sql[:WHERE].concat meta[:where]
+
+      sql[:WHERE] << "#{field meta, :type_id} = :#{meta[:name].to_s.upcase}_TYPE_ID"
+
+      if meta[:not_exists]
+        block = self[meta[:not_exists]]
+        w = ""
+        w << %^  NOT EXISTS (\n^
+        w << %^    SELECT 1\n^
+        w << %^    FROM #{meta[:not_exists]}\n^
+        w << %^    WHERE\n^
+
+        conds = []
+        block[:where].each { |block_meta|
+          type_id = block_meta.first
+          c = ""
+          c << %^    (\n^
+          c << "      #{field meta, block_meta[1][1], block_meta[1][2]} = #{field block, block_meta[2][1], block_meta[2][2]}\n"
+          c << "      AND\n"
+          c << "      #{meta[:not_exists]}.type_id = :#{type_id}_TYPE_ID\n"
+          c << "      AND\n"
+          c << "      #{field meta, block_meta[3][1], block_meta[3][2]} = #{field block, block_meta[4][1], block_meta[4][2]}\n"
+          c << %^    )\n^
+          conds << c
+        }
+
+        w << conds.join("    OR\n")
+        sql[:WHERE] << w
+      end
+
+    when :from
+
+      last = nil
+
+      (meta[:from].empty? ? [meta[:name]] : meta[:from]).each_with_index { |k, i|
+        string = ""
+        final[:WITH] << k
+        table = self[k]
+
+        if !last
+          string << (meta[:from].empty? ? "link AS #{k}" : k.to_s)
+
+          [:out_ftable, :in_ftable].each { |ftable|
+            if meta[ftable]
+              final[:WITH] << meta[ftable]
+              string << %^\n  LEFT JOIN #{meta[ftable]} AS #{table_name meta, ftable}^
+              string << %^\n    ON #{field meta, prefix_raw(ftable)} = #{meta[ftable]}.id^
             end
           }
-        )
 
-      when :group_by
-        sql[:GROUP_BY].concat meta[:group_by]
+        else
+          string << %^\n  INNER JOIN #{table[:name]}\n^
+          string << %^    ON #{ field last, :in } = #{ field table, :out }^
+        end # === if !last
 
-      else
-        fail "Programmer Error: unknown key #{k.inspect}"
+        sql[:FROM] << string
+        last = table
 
-      end # === each
-    }
+      } # === meta each_with_index
+
+    when :order_by
+      sql[:ORDER_BY].concat(
+        meta[:order_by].map { |unknown|
+          case unknown
+          when Array
+            unknown.join ' '.freeze
+          when String
+            unknown
+          else
+            fail ArgumentError, "Unknown type for :order_by: #{unknown.class}"
+          end
+        }
+      )
+
+    when :group_by
+      sql[:GROUP_BY].concat meta[:group_by]
+
+    else
+      fail "Programmer Error: unknown key #{k.inspect}"
+
+    end # === each
 
     s = ""
     s << %^SELECT\n  #{sql[:SELECT].join ",\n  "}\n^
@@ -450,7 +439,7 @@ class I_Dig_Sql
     end
 
     s
-  end # === def cte_to_string
+  end # === def compile_meta
 
   def with_to_raw final
     withs    = final[:WITH].dup
