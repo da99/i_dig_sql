@@ -177,6 +177,14 @@ class I_Dig_Sql
     compile(*args)[:SQL]
   end
 
+  %w{ WITH FRAGMENT SQL }.each { |k|
+    eval <<-EOF.strip, nil, __FILE__, __LINE__
+      def #{k}
+        return @#{k} if @SQL
+        to_meta[:#{k}]
+      end
+    EOF
+  }
   private # ==========================================
 
   def compile target = nil
@@ -191,7 +199,7 @@ class I_Dig_Sql
                   flatten.
                   compact.
                   uniq
-                str = withs.map { |k| "#{k} AS ( #{self[k].to_meta[:FRAGMENT]} )" }.join ",\n  "
+                str = withs.map { |k| "#{k} AS ( #{self[k].FRAGMENT} )" }.join ",\n  "
                 %{WITH\n  #{str}\n}
               end
       @SQL = [@WITH, @FRAGMENT].compact.join NEW_LINE
