@@ -6,6 +6,7 @@ class I_Dig_Sql
   include Enumerable
 
   HAS_VAR = /(\{\{|\<\<)[^\}\>]+(\}\}|\>\>)/
+  SELECT_FROM_REG = /SELECT.+FROM.+/
 
   NEW_LINE             = "\n"
   IS_COMMENT_REGEXP    = /\A\s*\#/
@@ -123,8 +124,12 @@ class I_Dig_Sql
     l[NOT_EXISTS_REGEXP]
   end
 
+  def IS_RAW l
+    l[SELECT_FROM_REG] || l[HAS_VAR]
+  end
+
   def def name, str = nil
-    if name && str && str[/SELECT.+FROM.+/.freeze]
+    if name && str && IS_RAW(str)
       return(@digs << I_Dig_Sql.new(name, str))
     end
 

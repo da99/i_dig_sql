@@ -8,8 +8,8 @@ describe :to_sql do
     EOF
     i[:FIRST] = " << SECOND >> "
     i[:SECOND] = " << THIRD >> "
-    i[:THIRD] = "FINAL"
-    sql(i).should == "FINAL"
+    i[:THIRD] = "SELECT id FROM phantom"
+    sql(i).should == "SELECT id FROM phantom"
   end # === it
 
   it "prints CTE definitions once, if used multiple times" do
@@ -17,11 +17,11 @@ describe :to_sql do
       {{my_cte}}
       {{my_cte}}
     EOF
-    i[:my_cte] = "SELECT *"
+    i[:my_cte] = "SELECT * FROM my"
     sql(i).should == sql(%^
       WITH
       my_cte AS (
-        SELECT *
+        SELECT * FROM my
       )
       my_cte
       my_cte
