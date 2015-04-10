@@ -19,11 +19,15 @@ class I_Dig_Sql
   class << self
   end # === class self ===
 
-  attr_reader :digs
+  attr_reader :digs, :WITHS
   def initialize *args
-    @COMPILED = {}
-    @digs     = []
-    @data   = H.new(:allow_update)
+    @WITH     = nil
+    @FRAGMENT = nil
+    @SQL      = nil
+    @WITHS    = []
+
+    @digs  = []
+    @data  = H.new(:allow_update)
     .merge!(
       :name =>nil,
       :raw  =>nil,
@@ -78,27 +82,36 @@ class I_Dig_Sql
     vars = H.new.merge!(@data[:vars])
 
     @digs.reverse.inject(vars) { |memo, dig|
-      memo.merge_with_no_dups dig.vars!
+      if dig != self
+        memo.merge! dig.vars
+      end
       memo
     }
   end
 
   def has_key? name
-    return true if @data[:name] == name
-    !!(
-      @digs.reverse.detect { |d|
-        d.has_key?(name)
-      }
-    )
+    !!(search name)
+  end
+
+  def search name
+    return self if self.name == name
+    found = false
+    @digs.reverse.detect { |d|
+      found = if d.name == name
+                d
+              else
+                d.digs.detect { |deep|
+                  deep.name == name
+                }
+              end
+    }
+    found
   end
 
   def [] name
-    return self if self.name == name
-    found = @digs.reverse.detect { |d|
-      d.has_key?(name)
-    }
+    found = search(name)
     fail ArgumentError, "SQL not found for: #{name.inspect}" unless found
-    found[name]
+    found
   end
 
   def []= name, val
@@ -106,7 +119,7 @@ class I_Dig_Sql
 
     case val
     when String
-      @digs << I_Dig_Sql.new(name, val)
+      @digs << I_Dig_Sql.new(self, name, val)
 
     when Hash, H
       case
@@ -115,7 +128,7 @@ class I_Dig_Sql
       when val[:raw]
         @data.merge! val
       else
-        @digs << I_Dig_Sql.new(name, val)
+        @digs << I_Dig_Sql.new(self, name, val)
       end
 
     when I_Dig_Sql
@@ -148,59 +161,72 @@ class I_Dig_Sql
     end
   end
 
-  def to_pair
-    [to_sql, vars!]
-  end
-
   def has_raw?
     !!(@data[:raw] && !@data[:raw].strip.empty?)
   end
 
-  def done? k
-    !!(@COMPILED.has_key?(k))
+  def to_pair
+    [to_sql, vars!]
   end
 
-  def dones k
-    @COMPILED[k] ||= begin
-                       h = {:WITH=>[], :sql=>nil}
-                       h.default_proc = lambda { |h, k|
-                         fail ArgumentError, "Unknown key: #{k.inspect}"
-                       }
-                       h
-                     end
+  def to_meta
+    compile
   end
 
   def to_sql *args
-    to_sql_meta(*args)[:sql]
+    compile(*args)[:SQL]
   end
 
-  def to_sql_meta target_name = nil
-    fail ArgumentError, "No query defined." if !target_name && !has_raw?
+  private # ==========================================
 
-    return compile_raw unless target_name
+  def compile target = nil
+    if !@SQL
+      has_raw? ?  compile_raw : compile_meta
 
-    final = {
-      WITH:     [],
-      RAW:      [],
-      WITH!:    nil
-    }
-
-
-    table_name_to_raw(target_name, final) if target_name
-    with_to_raw(final)
-
-    string = ""
-
-    if !final[:WITH!].empty?
-      string << (%^WITH\n  #{final[:WITH!].join ",\n  "}\n^)
+      @WITH = if @WITHS.empty?
+                ""
+              else
+                withs = @WITHS.compact.uniq
+                withs = (withs + withs.map { |k| self[k].to_meta[:WITHS] }).
+                  flatten.
+                  compact.
+                  uniq
+                str = withs.map { |k| "#{k} AS ( #{self[k].to_meta[:FRAGMENT]} )" }.join ",\n  "
+                %{WITH\n  #{str}\n}
+              end
+      @SQL = [@WITH, @FRAGMENT].compact.join NEW_LINE
     end
 
-    string << (final[:RAW].join "\n")
-
-    string
+    {FRAGMENT: @FRAGMENT, SQL: @SQL, WITH: @WITH, VARS: vars!}
   end # === def to_sql
 
-  private # ==========================================
+  def compile_raw
+    @data[:raw].freeze
+
+    s = @FRAGMENT = @data[:raw].dup
+
+    while s[HAS_VAR] 
+      s.gsub!(/\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
+        key = $1.to_sym
+        @WITHS << key
+        key
+      end
+
+      s.gsub!(/\<\<\s?([a-zA-Z0-9\_\-\ \*]+)\s?\>\>/) do |match|
+        tokens = $1.split
+        key    = tokens.pop.to_sym
+        field  = tokens.empty? ? nil : tokens.join(' ')
+
+        case
+        when field
+          @WITHS << key
+          "SELECT #{field} FROM #{key}"
+        else
+          self[key].to_sql
+        end
+      end
+    end # === while s HAS_VAR
+  end # === fragments_to_raw
 
   def prefix_raw sym
     "raw_#{sym.to_s.split('_').first}".to_sym
@@ -271,37 +297,6 @@ class I_Dig_Sql
 
     end # === case
   end
-
-  def compile_raw
-    return dones(:raw) if done?(:raw)
-    @data[:raw].freeze
-
-    s = dones(:raw)[:sql] = @data[:raw].dup
-
-    while s[HAS_VAR] 
-      s.gsub!(/\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
-        key = $1.to_sym
-        dones(:raw)[:WITH] << key
-        key
-      end
-
-      s.gsub!(/\<\<\s?([a-zA-Z0-9\_\-\ \*]+)\s?\>\>/) do |match|
-        tokens = $1.split
-        key    = tokens.pop.to_sym
-        field  = tokens.empty? ? nil : tokens.join(' ')
-
-        case
-        when field
-          dones(:raw)[:WITH] << key
-          "SELECT #{field} FROM #{key}"
-        else
-          self[key].raw
-        end
-      end
-    end # === while s HAS_VAR
-
-    dones(:raw)
-  end # === fragments_to_raw
 
   def table_name_to_raw key, final
     target = self[key]
