@@ -4,7 +4,7 @@ describe "links DSL" do
   it "runs" do
     sql = I_Dig_Sql.new
 
-    sql.def(<<-EOF
+    sql << <<-EOF
 
              link AS DEFAULT
           asker_id |  giver_id
@@ -34,29 +34,16 @@ describe "links DSL" do
              NOT EXISTS block
 
                  feed
-          FROM follow, post
-          FOR  :audience_id
+          FROM
+            follow, post
+          OF
+            :audience_id
           GROUP BY follow.star
           SELECT
             follow.star_screen_name,
             post.*
             max(post.computer_created_at)
     EOF
-    )
-
-    # sql.def(:feed) do
-
-      # get :follow, :post
-      # of  :audience_id
-      # group_by 'follow.star'
-
-      # select(
-        # 'follow.star.screen_name',
-        # 'post.*', 
-        # 'max(post.pub.created_at)'
-      # )
-
-    # end # === query
 
     actual = sql.to_sql(:feed)
 

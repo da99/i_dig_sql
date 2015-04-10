@@ -1,5 +1,6 @@
 
 require "i_dig_sql/H"
+require "i_dig_sql/parse"
 
 class I_Dig_Sql
 
@@ -8,17 +9,10 @@ class I_Dig_Sql
   HAS_VAR = /(\{\{|\<\<)[^\}\>]+(\}\}|\>\>)/
   SELECT_FROM_REG = /SELECT.+FROM.+/
 
-  NEW_LINE             = "\n"
-  IS_COMMENT_REGEXP    = /\A\s*\#/
-  IS_FIELD_LIST_REGEXP = /\A[a-z0-9\_\ \,]+\Z/
-  IS_COMBO_REGEXP      = /[_]{2,}.+\|.+[_]{2,}/
-  SINGLE_PIPE          = /[^\|]\|[^\|]/
-  COMMA                = ","
-  NOT_EXISTS_REGEXP    = /(NOT\s+EXISTS\s+)/
-  ORDER_BY_REGEXP      = /ORDER\s+BY\s+/
-  GROUP_BY_REGEXP      = /GROUP\s+BY\s+/
-  UPCASE_START         = /\A[A-Z]/
-  DOWNCASE_START       = /\A[^A-Z]/
+
+  ALL_UNDERSCORE   = /\A[_]+\Z/
+  COMBO_LEFT_RIGHT = [:left, :left, :right, :right]
+  COMBO_OUT_IN     = [:out, :in, :out, :in]
 
   Duplicate = Class.new RuntimeError
 
@@ -28,28 +22,45 @@ class I_Dig_Sql
   attr_reader :digs
   def initialize *args
     @digs   = []
-    @data   = H.new(:allow_update).merge!(
-      :name=>nil,
-      :raw=>nil,
-      :vars=>H.new
+    @data   = H.new(:allow_update)
+    .merge!(
+      :name =>nil,
+      :raw  =>nil,
+      :vars =>H.new
     )
+
     args.each { |a|
+
       case a
+
       when Symbol
         @data[:name] = a
+
       when I_Dig_Sql
-        (@digs ||= []) << a
+        @digs << a
+
       when String
-        @data[:raw] = a
+        tables = self.class.parse(a)
+        if tables.size == 1 && tables.first[:raw]
+          @data.merge! tables.first
+        else
+          tables.map { |t|
+            self[t[:name]] = t
+          }
+        end
+
       when Hash, H
-        if a.has_key?(:unparsed) || a.has_key?(:in) || a.has_key?(:real_table)
+        if a.has_key?(:raw) || a.has_key?(:unparsed) || a.has_key?(:in) || a.has_key?(:real_table)
           @data.merge! a
         else
           @data[:vars].merge! a
         end
+
       else
         fail ArgumentError, "Unknown arg: #{a.inspect}"
-      end
+
+      end  # === case
+
     }
 
   end # === def initialize
@@ -91,6 +102,28 @@ class I_Dig_Sql
 
   def []= name, val
     fail ArgumentError, "Name already taken: #{name.inspect}" if has_key?(name)
+
+    case val
+    when String
+      @digs << I_Dig_Sql.new(name, val)
+
+    when Hash, H
+      case
+      when val[:name] == :DEFAULT
+        @digs << I_Dig_Sql.new(:DEFAULT, val)
+      when val[:raw]
+        @data.merge! val
+      else
+        @digs << I_Dig_Sql.new(name, val)
+      end
+
+    when I_Dig_Sql
+      @digs << val
+
+    else
+      fail ArgumentError, "Unknown class: #{name.inspect} -> #{val.class}"
+
+    end # === case
     self.def name, val
   end
 
@@ -104,300 +137,19 @@ class I_Dig_Sql
     end
   end
 
-  def IS_COMBO l
-    l[IS_COMBO_REGEXP]
-  end
-
-  def IS_FIELD_LIST l
-    l[IS_FIELD_LIST_REGEXP]
-  end
-
-  def IS_COMMENT l
-    l[IS_COMMENT_REGEXP]
-  end
-
-  def IS_EMPTY l
-    l && l.strip.empty?
-  end
-
-  def NOT_EXISTS(l)
-    l[NOT_EXISTS_REGEXP]
-  end
-
-  def IS_RAW l
-    l[SELECT_FROM_REG] || l[HAS_VAR]
-  end
-
-  def def name, str = nil
-    if name && str && IS_RAW(str)
-      return(@digs << I_Dig_Sql.new(name, str))
-    end
-
-    if name && !str
-      str  = name
-      name = nil
-    end
-
-    blocks = []
-    last   = nil
-    lines  = str.split(NEW_LINE)
-
-    while l = lines.shift
-      is_empty   = IS_EMPTY(l)
-      is_comment = IS_COMMENT(l)
-      case
-      when is_empty && last
-        fail "not ready"
-      when is_empty && !last
-        next
-      when is_comment
-        next
-      else
-        b = [l.strip]
-        while lines.first && !IS_EMPTY(lines.first)
-          l = lines.shift
-          (b << l.strip) unless IS_COMMENT(l)
-        end
-        blocks << b
-      end
-    end # === while
-
-    tables = {}
-
-    blocks.each { |b|
-
-      if name
-        first  = name
-        pieces = []
-      else
-        first  = b.shift
-        pieces = first.split
-      end
-
-      case
-
-      when first.is_a?(Symbol)
-        tables[first] = {
-          :name       => first,
-          :real_table => first,
-          :unparsed   => b
-        }
-
-      when pieces.size == 1
-        tables[first.to_sym] = {
-          :name       => first.to_sym,
-          :real_table => first.to_sym,
-          :unparsed   => b
-        }
-
-      when first['DEFAULT']
-        fields = b.shift.split('|').map(&:strip)
-        fail ArgumentError, "Unknown options: #{b.inspect}" if !b.empty?
-
-        t = {
-          :name     => pieces.first,
-          :out      => fields.first.to_sym,
-          :in       => fields.last.to_sym,
-          :unparsed => []
-        }
-        t.default_proc = lambda { |h, k| fail ArgumentError, "Unknown key: #{k.inspect}" }
-
-        tables[:DEFAULT] = t
-
-      when pieces.size == 3 && first[' AS ']
-        tables[pieces.last.to_sym] = {
-          :name       => pieces.last.to_sym,
-          :real_table => pieces.first.to_sym,
-          :unparsed   => b
-        }
-
-      else
-        fail "Programmer Error: unknown parsing rule for: #{first.inspect}"
-
-      end # === case
-    }
-
-    tables.each { |name, meta|
-      meta[:out] ||= {}
-      meta[:in]  ||= {}
-      has_out_in = false
-      while meta[:unparsed] && l = meta[:unparsed].shift
-        case
-
-        #  field_1, field_2 , ...
-        when IS_FIELD_LIST(l) && meta[:unparsed].empty?
-          meta[:SELECT] = l.split(',')
-
-        # out | in
-        when ((pieces = l.split('|')) && pieces.size == 2) && !has_out_in
-          meta[:out][:name], meta[:in][:name] = pieces.map(&:strip).map(&:to_sym)
-          has_out_in = true
-
-        # inner_join_table_names | inner_join_table_name
-        when ((pieces = l.split(SINGLE_PIPE)) && pieces.size == 2) && meta[:out] && meta[:in]
-          meta[:out][:inner_join] = pieces.first.split(COMMA).map(&:strip).map(&:to_sym)
-          meta[:in][:inner_join]  = pieces.last.split(COMMA).map(&:strip).map(&:to_sym)
-          if meta[:name] == meta[:real_table] && tables[:DEFAULT]
-            meta[:real_table] = tables[:DEFAULT][:name]
-          end
-
-        when ((pieces = l.split('||')) && pieces.size == 2)
-          meta[:type_id] = pieces.map(&:strip).map(&:to_sym)
-
-        #  ___ field | field ___
-        when (IS_COMBO(l))
-          meta[:combos] ||= []
-          meta[:combos] << l
-
-        #    NOT  EXISTS   name
-        when NOT_EXISTS(l)
-          (meta[:NOT_EXISTS] ||= []).concat l.split(NOT_EXISTS_REGEXP).last.split.map(&:to_sym)
-
-        when l[ORDER_BY_REGEXP]
-          (meta[:ORDER_BY] ||= []).concat l.split(ORDER_BY_REGEXP).last.split(COMMA).map(&:strip)
-
-        when l[GROUP_BY_REGEXP]
-          (meta[:GROUP_BY] ||= []).concat l.split(GROUP_BY_REGEXP).last.split(COMMA).map(&:strip)
-
-        when %w{ FROM OF SELECT }.freeze.include?(clause = l.split.first)
-          (meta[clause.to_sym] ||= []).concat l.split(clause).last.split(COMMA).map(&:strip).map(&:to_sym)
-          while meta[:unparsed].first && meta[:unparsed].first[DOWNCASE_START]
-            (meta[clause.to_sym] ||= []) << meta[:unparsed].shift
-          end
-
-        else
-          fail "Programmer Error: Parsing rule not found for: #{l.inspect}"
-
-        end # === case
-      end # === while
-
-      meta[:out] = nil if meta[:out].empty?
-      meta[:in]  = nil if meta[:in].empty?
-      meta.default_proc = lambda { |h, k|
-        fail ArgumentError, "Key not found: #{k.inspect}"
-      }
-
-    } # === tables each
-
-    if tables[:DEFAULT]
-      @digs << I_Dig_Sql.new(:DEFAULT, tables[:DEFAULT])
-      tables.delete :DEFAULT
-    end
-
-    tables.each { |name, meta|
-      @digs << I_Dig_Sql.new(meta)
-    }
-
-  end # === def describe
-
-  # === LINK DSL ====================================================
-  def _def name
-    @sqls[name] = H.new(:allow_update).merge!(
-      :name       => name,
-      :order_by   => [],
-      :group_by   => [],
-      :select     => [],
-      :where      => [],
-      :from       => [],
-      :type_ids   => [],
-      :out        => nil,
-      :in         => nil,
-      :out_ftable => nil,
-      :in_ftable  => nil,
-      :out_has    => nil,
-      :in_has     => nil,
-      :not_exists => nil
-    )
-    old = @current_def
-    @current_def = @sqls[name]
-    instance_eval &Proc.new
-    @current_def = old
-    self
-  end
-
-  def out_in o, i
-    @current_def[:out] = o
-    @current_def[:in]  = i
-    @out_in ||=[]
-    @out_in << :out
-    @out_in << :in
-    instance_eval(&Proc.new) if block_given?
-    @out_in.pop
-    @out_in.pop
-    self
-  end
-
-  def are table_name
-    @current_def[:out_ftable] = table_name
-    @current_def[:in_ftable]  = table_name
-    self
-  end
-
-  def have table_name
-    @current_def[:out_has] = table_name
-    @current_def[:in_has]  = table_name
-    self
-  end
-
-  def not_exists t
-    if (@out_in.size % 2) != 0
-      fail ArgumentError, "Currently, :not_exists can only be used within: out_in { }."
-    end
-    @current_def[:not_exists] = t
-    self
-  end
-
-  def order_by *args
-    @current_def[:order_by] << args
-    self
-  end
-
-  def group_by *args
-    @current_def[:group_by] << args
-    self
-  end
-
-  def select *args
-    @current_def[:select] << args
-    self
-  end
-
-  def get *args
-    @current_def[:from].concat args
-    self
-  end
-
-  def of name
-    @current_def[:of] = name
-  end
-
-  ALL_UNDERSCORE = /\A[_]+\Z/
-  COMBO_LEFT_RIGHT = [:left, :left, :right, :right]
-  COMBO_OUT_IN     = [:out, :in, :out, :in]
-  def where str
-    _and_ = []
-    lines = str.strip.split("\n")
-    _and_ << lines.shift
-    lines.map { |line|
-      line.split.each_with_index { |k, i|
-        next if k[ALL_UNDERSCORE]
-        _and_ << [COMBO_LEFT_RIGHT[i], COMBO_OUT_IN[i], k.to_sym]
-      }
-    }
-    @current_def[:where] << _and_
-    self
-  end
-  alias_method :or, :where
-  # =================================================================
-
-  # === Rendering DSL ===============================================
 
   def << str
-    (@data[:raw] ||= "") << str
+    if IS_RAW(str)
+      (@data[:raw] ||= "") << str
+    else
+      self.class.parse(str).each { |t|
+        self[t[:name]] = t
+      }
+    end
   end
 
   def to_pair
-    [to_sql, vars]
+    [to_sql, vars!]
   end
 
   def has_raw?
