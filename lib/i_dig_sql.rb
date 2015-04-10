@@ -21,7 +21,8 @@ class I_Dig_Sql
 
   attr_reader :digs
   def initialize *args
-    @digs   = []
+    @COMPILED = {}
+    @digs     = []
     @data   = H.new(:allow_update)
     .merge!(
       :name =>nil,
@@ -124,7 +125,6 @@ class I_Dig_Sql
       fail ArgumentError, "Unknown class: #{name.inspect} -> #{val.class}"
 
     end # === case
-    self.def name, val
   end
 
   def each
@@ -142,8 +142,8 @@ class I_Dig_Sql
     if IS_RAW(str)
       (@data[:raw] ||= "") << str
     else
-      self.class.parse(str).each { |t|
-        self[t[:name]] = t
+      self.class.parse(str).each { |name, t|
+        self[name] = t
       }
     end
   end
@@ -156,16 +156,36 @@ class I_Dig_Sql
     !!(@data[:raw] && !@data[:raw].strip.empty?)
   end
 
-  def to_sql target_name = nil
+  def done? k
+    !!(@COMPILED.has_key?(k))
+  end
+
+  def dones k
+    @COMPILED[k] ||= begin
+                       h = {:WITH=>[], :sql=>nil}
+                       h.default_proc = lambda { |h, k|
+                         fail ArgumentError, "Unknown key: #{k.inspect}"
+                       }
+                       h
+                     end
+  end
+
+  def to_sql *args
+    to_sql_meta(*args)[:sql]
+  end
+
+  def to_sql_meta target_name = nil
+    fail ArgumentError, "No query defined." if !target_name && !has_raw?
+
+    return compile_raw unless target_name
+
     final = {
       WITH:     [],
       RAW:      [],
       WITH!:    nil
     }
 
-    fail ArgumentError, "No query defined." if !target_name && !has_raw?
 
-    fragments_to_raw(@data[:raw], final)
     table_name_to_raw(target_name, final) if target_name
     with_to_raw(final)
 
@@ -252,43 +272,35 @@ class I_Dig_Sql
     end # === case
   end
 
-  def fragments_to_raw str_or_arr, final = {:WITH=>[], :RAW=>[]}
-    raws = if str_or_arr.is_a?(String)
-             [str_or_arr]
-           else
-             str_or_arr
-           end
+  def compile_raw
+    return dones(:raw) if done?(:raw)
+    @data[:raw].freeze
 
-    fragments = raws.dup
-    while s = fragments.shift
-      next unless s.is_a?(String)
+    s = dones(:raw)[:sql] = @data[:raw].dup
 
-      final[:RAW] << s
-      while s[HAS_VAR] 
-        s.gsub!(/\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
-          key = $1.to_sym
-          final[:WITH] << key
-          key
+    while s[HAS_VAR] 
+      s.gsub!(/\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
+        key = $1.to_sym
+        dones(:raw)[:WITH] << key
+        key
+      end
+
+      s.gsub!(/\<\<\s?([a-zA-Z0-9\_\-\ \*]+)\s?\>\>/) do |match|
+        tokens = $1.split
+        key    = tokens.pop.to_sym
+        field  = tokens.empty? ? nil : tokens.join(' ')
+
+        case
+        when field
+          dones(:raw)[:WITH] << key
+          "SELECT #{field} FROM #{key}"
+        else
+          self[key].raw
         end
+      end
+    end # === while s HAS_VAR
 
-        s.gsub!(/\<\<\s?([a-zA-Z0-9\_\-\ \*]+)\s?\>\>/) do |match|
-          tokens = $1.split
-          key    = tokens.pop.to_sym
-          field  = tokens.empty? ? nil : tokens.join(' ')
-
-          case
-          when field
-            final[:WITH] << key
-            "SELECT #{field} FROM #{key}"
-          else
-            self[key].raw
-          end
-        end
-      end # === while s HAS_VAR
-
-    end # === while
-
-    final
+    dones(:raw)
   end # === fragments_to_raw
 
   def table_name_to_raw key, final

@@ -12,6 +12,7 @@ class I_Dig_Sql
   GROUP_BY_REGEXP      = /GROUP\s+BY\s+/
   UPCASE_START         = /\A[A-Z]/
   DOWNCASE_START       = /\A[^A-Z]/
+  CLAUSES              = %w{ FROM OF SELECT }
 
   module Helpers
 
@@ -124,7 +125,6 @@ class I_Dig_Sql
             :in       => fields.last.to_sym,
             :unparsed => []
           }
-          t.default_proc = lambda { |h, k| fail ArgumentError, "Unknown key: #{k.inspect}" }
 
           tables[:DEFAULT] = t
 
@@ -183,8 +183,20 @@ class I_Dig_Sql
           when l[GROUP_BY_REGEXP]
             (meta[:GROUP_BY] ||= []).concat l.split(GROUP_BY_REGEXP).last.split(COMMA).map(&:strip)
 
-          when %w{ FROM OF SELECT }.freeze.include?(clause = l.split.first)
-            (meta[clause.to_sym] ||= []).concat l.split(clause).last.split(COMMA).map(&:strip).map(&:to_sym)
+          when CLAUSES.include?(clause = l.split.first)
+
+            (meta[clause.to_sym] ||= [])
+            tail = l.split(clause).last
+
+            if tail
+              meta[clause.to_sym].concat(
+                tail.
+                split(COMMA).
+                map(&:strip).
+                map(&:to_sym)
+              )
+            end
+
             while meta[:unparsed].first && meta[:unparsed].first[DOWNCASE_START]
               (meta[clause.to_sym] ||= []) << meta[:unparsed].shift
             end
@@ -197,9 +209,6 @@ class I_Dig_Sql
 
         meta[:out] = nil if meta[:out].empty?
         meta[:in]  = nil if meta[:in].empty?
-        meta.default_proc = lambda { |h, k|
-          fail ArgumentError, "Key not found: #{k.inspect}"
-        }
 
       } # === tables each
 
