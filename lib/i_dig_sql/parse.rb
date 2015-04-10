@@ -2,7 +2,7 @@
 class I_Dig_Sql
 
   NEW_LINE             = "\n"
-  IS_COMMENT_REGEXP    = /\A\s*\#/
+  IS_COMMENT_REGEXP    = /\A\s*(\#|\-\-)/
   IS_FIELD_LIST_REGEXP = /\A[a-z0-9\_\ \,]+\Z/
   IS_COMBO_REGEXP      = /[_]{2,}.+\|.+[_]{2,}/
   SINGLE_PIPE          = /[^\|]\|[^\|]/
@@ -120,7 +120,7 @@ class I_Dig_Sql
           fail ArgumentError, "Unknown options: #{b.inspect}" if !b.empty?
 
           t = {
-            :name     => pieces.first,
+            :name     => pieces.first.to_sym,
             :out      => fields.first.to_sym,
             :in       => fields.last.to_sym,
             :unparsed => []
@@ -145,19 +145,19 @@ class I_Dig_Sql
         meta[:out] ||= {}
         meta[:in]  ||= {}
         has_out_in = false
-        while meta[:unparsed] && l = meta[:unparsed].shift
+        while meta[:unparsed] && (l = meta[:unparsed].shift)
           case
 
-            #  field_1, field_2 , ...
+          #  field_1, field_2 , ...
           when IS_FIELD_LIST(l) && meta[:unparsed].empty?
             meta[:SELECT] = l.split(',')
 
-            # out | in
+          # out | in
           when ((pieces = l.split('|')) && pieces.size == 2) && !has_out_in
             meta[:out][:name], meta[:in][:name] = pieces.map(&:strip).map(&:to_sym)
             has_out_in = true
 
-            # inner_join_table_names | inner_join_table_name
+          # inner_join_table_names | inner_join_table_name
           when ((pieces = l.split(SINGLE_PIPE)) && pieces.size == 2) && meta[:out] && meta[:in]
             meta[:out][:inner_join] = pieces.first.split(COMMA).map(&:strip).map(&:to_sym)
             meta[:in][:inner_join]  = pieces.last.split(COMMA).map(&:strip).map(&:to_sym)
@@ -165,15 +165,15 @@ class I_Dig_Sql
               meta[:real_table] = tables[:DEFAULT][:name]
             end
 
-          when ((pieces = l.split('||')) && pieces.size == 2)
-            meta[:type_id] = pieces.map(&:strip).map(&:to_sym)
+          when l['TYPE_ID']
+            s = []
+            while (f = meta[:unparsed].first) && !f['TYPE_ID']
+              s << meta[:unparsed].shift
+            end
+            (meta[:combos] ||= []) << {:type_id=>l.strip.to_sym, :raw=>s.join(NEW_LINE)}
+ 
 
-            #  ___ field | field ___
-          when (IS_COMBO(l))
-            meta[:combos] ||= []
-            meta[:combos] << l
-
-            #    NOT  EXISTS   name
+          #    NOT  EXISTS   name
           when NOT_EXISTS(l)
             (meta[:NOT_EXISTS] ||= []).concat l.split(NOT_EXISTS_REGEXP).last.split.map(&:to_sym)
 
@@ -199,6 +199,10 @@ class I_Dig_Sql
 
             while meta[:unparsed].first && meta[:unparsed].first[DOWNCASE_START]
               (meta[clause.to_sym] ||= []) << meta[:unparsed].shift
+            end
+
+            if clause == 'FROM'
+              meta[:FROM] = meta[:FROM].map { |str| str.split(COMMA) }.flatten.map(&:strip).map(&:to_sym)
             end
 
           else

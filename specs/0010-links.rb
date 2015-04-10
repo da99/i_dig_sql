@@ -9,17 +9,26 @@ describe "links DSL" do
              link AS DEFAULT
           asker_id |  giver_id
 
+         ----------------------
               screen_name
-            id, screen_name
+        id, owner_id, screen_name
+         ----------------------
 
+               ----------------------
                        block
                 blocked  |  victim
              screen_name | screen_name
-   BLOCK_SCREEN_TYPE_ID || BLOCK_OWNER_TYPE_ID
-        ________  raw    |   ________    raw
-      owner_id  ______   | owner_id    ______
-    ________  owner_id   | owner_id    ______
-    raw       ______     |  ________    raw
+               ----------------------
+                 BLOCK_SCREEN_TYPE_ID
+     ( f.out = blocked AND f.in.owner_id = victim.owner_id )
+                       OR
+     ( f.in = blocked AND f.out.owner_id = victim.owner_id )
+               ----------------------
+                  BLOCK_OWNER_TYPE_ID
+( f.out.owner_id = blocked.owner_id AND f.in.owner_id  = victim.owner_id )
+                       OR
+( f.in.owner_id  = blocked.owner_id AND f.out.owner_id = victim.owner_id )
+               ----------------------
 
                   post
             pinner | pub

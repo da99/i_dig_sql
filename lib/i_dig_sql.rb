@@ -19,7 +19,7 @@ class I_Dig_Sql
   class << self
   end # === class self ===
 
-  attr_reader :digs, :WITHS
+  attr_reader :digs, :WITHS, :data
   def initialize *args
     @WITH     = nil
     @FRAGMENT = nil
@@ -325,6 +325,7 @@ class I_Dig_Sql
 
   def compile_meta
     aputs @data
+    aputs self[:block].data
     fail "NOT rEADY"
 
     k = nil
