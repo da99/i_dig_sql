@@ -17,9 +17,4 @@ describe '.new' do
     ^)
   end # === it
 
-  it "combines all Strings" do
-    i = I_Dig_Sql.new "SELECT ", " * ", " FROM ", " NAME "
-    sql(i).should == sql("SELECT * FROM NAME")
-  end # === it
-
 end # === describe '.new'

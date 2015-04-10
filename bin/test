@@ -10,6 +10,10 @@ if [[ "$x" == "watch" ]]; then
 
   echo ""
   echo "=== Watching: $@"
+
+  echo -e "\n=== Running test:"
+  bin/test "$@" || echo ""
+
   inotifywait -q -m -e close_write,close --exclude .git/ -r .  | while read CHANGE
   do
 

@@ -14,7 +14,7 @@ describe :vars do
     dig = I_Dig_Sql.new one, two, three
     dig.vars[:four] = 4
 
-    dig.vars.should == {
+    dig.vars!.should == {
       four:  4,
       three: 3,
       two:   2,
@@ -29,7 +29,7 @@ describe :vars do
 
       i = I_Dig_Sql.new one
       i.vars[:two] = 3
-      i.vars
+      i.vars!
     }.message.should.match /Key already set: :two/
   end # === it
 

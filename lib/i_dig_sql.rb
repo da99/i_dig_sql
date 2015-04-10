@@ -24,6 +24,7 @@ class I_Dig_Sql
   class << self
   end # === class self ===
 
+  attr_reader :digs
   def initialize *args
     @digs   = []
     @data   = H.new(:allow_update).merge!(
@@ -60,11 +61,20 @@ class I_Dig_Sql
     EOF
   }
 
+  def vars!
+    vars = H.new.merge!(@data[:vars])
+
+    @digs.reverse.inject(vars) { |memo, dig|
+      memo.merge_with_no_dups dig.vars!
+      memo
+    }
+  end
+
   def has_key? name
     return true if @data[:name] == name
     !!(
       @digs.reverse.detect { |d|
-        d.has_key?(d)
+        d.has_key?(name)
       }
     )
   end
@@ -514,7 +524,7 @@ class I_Dig_Sql
             final[:WITH] << key
             "SELECT #{field} FROM #{key}"
           else
-            self[key]
+            self[key].raw
           end
         end
       end # === while s HAS_VAR

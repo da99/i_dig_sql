@@ -29,10 +29,14 @@ class I_Dig_Sql
       super
     end
 
-    def merge_these *args
+    def merge_with_no_dups *args
       args.each { |h|
         h.each { |k,v|
-          self[k] = v
+          if has_key?(k) && self[k] != v
+            fail ArgumentError, "Key already set: #{k.inspect}"
+          else
+            self[k] = v
+          end
         }
       }
       self
