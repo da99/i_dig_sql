@@ -49,7 +49,7 @@ describe "links DSL" do
             :audience_id
           GROUP BY follow.star
           SELECT
-            follow.star_screen_name,
+            follow.star_screen_name
             post.*
             max(post.computer_created_at)
     EOF

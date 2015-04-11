@@ -207,57 +207,27 @@ class I_Dig_Sql
   end
 
   #
-  # Example:
+  # Examples:
+  #
   #   field :in, :owner_id
   #   field :screen_name, :screen_name
   #   field :in
   #   field :raw_in
-  def field *args
-    meta = @data
-    case args.size
+  #
+  protected(
+    def field *args
 
-    when 2
-      if args.first == :in || args.first == :out
-        io, k = args
-        case
-        when meta[:"#{io}_has"] == k
-          tname = table_name(meta, :"#{io}_ftable")
-          "#{tname}.#{k}"
-        when k == :raw
-          field meta, :"raw_#{io}"
-        else
-          fail ArgumentError, "Unknown args for key: #{args.inspect}"
-        end
+      case args
+      when [:out], [:in]
+        "#{name}.#{data[args.last][:name]}"
+      when [:raw, :out], [:raw, :in]
+        "#{name}.#{self[:DEFAULT].data[args.last]}"
       else
-        tname = table_name(meta, args.first)
-        k     = args.last
-        "#{tname}.#{k}"
-      end
+        fail ArgumentError, "Unknown args: #{args.inspect}"
+      end # === case
 
-    when 1, 3
-      tname = meta[:name]
-      k     = args.first
-      case k
-      when :raw_in
-        "#{tname}.#{fields[:in]}"
-      when :raw_out
-        "#{tname}.#{fields[:out]}"
-      when :type_id
-        "#{tname}.#{k}"
-      else
-        if meta.has_key? k
-          "#{tname}.#{meta[k]}"
-        else
-          puts meta.inspect
-          "unknown"
-        end
-      end
-
-    else
-      fail ArgumentError, "Unknown args: #{args.inspect}"
-
-    end # === case
-  end
+    end # === def field
+  )
 
   def table_name_to_raw key, final
     target = self[key]
@@ -332,6 +302,7 @@ class I_Dig_Sql
       WHERE
         #{WHERE()}
     ^
+
     [:ORDER_BY, :GROUP_BY, :LIMIT, :OFFSET].each { |name|
       next unless @data.has_key?(name)
       @SQL << "\n" << %^
@@ -340,9 +311,8 @@ class I_Dig_Sql
     }
 
     aputs @data
-    @SQL.split("\n").each { |line|
-      aputs line
-    }
+    puts @SQL
+
     fail "NOT rEADY"
 
     k = nil
@@ -464,17 +434,21 @@ class I_Dig_Sql
     if selects.empty?
       "*"
     else
-      selects.join ",\n   "
+      selects.join ",\n"
     end
   end # === def SELECT
 
   def FROM
-    @data[:FROM].join ", "
+    @data[:FROM]
   end # === def FROM
 
   def WHERE
     wheres = @data[:WHERE]
-    wheres.join "\n"
+    if @data.has_key?(:OF)
+      table = self[@data[:FROM].first]
+      wheres << "#{table.field(:out)} = #{@data[:OF].first}"
+    end
+    wheres
   end
 
   def with_to_raw final

@@ -120,10 +120,11 @@ class I_Dig_Sql
           fail ArgumentError, "Unknown options: #{b.inspect}" if !b.empty?
 
           t = {
-            :name     => pieces.first.to_sym,
-            :out      => fields.first.to_sym,
-            :in       => fields.last.to_sym,
-            :unparsed => []
+            :name       => :DEFAULT,
+            :real_table => pieces.first.to_sym,
+            :out        => fields.first.to_sym,
+            :in         => fields.last.to_sym,
+            :unparsed   => []
           }
 
           tables[:DEFAULT] = t
@@ -199,6 +200,12 @@ class I_Dig_Sql
 
             while meta[:unparsed].first && meta[:unparsed].first[DOWNCASE_START]
               (meta[clause.to_sym] ||= []) << meta[:unparsed].shift
+            end
+
+            if clause == 'SELECT'
+              meta[:SELECT] = meta[:SELECT].map { |str|
+                str.split(','.freeze).map(&:strip)
+              }.flatten
             end
 
             if clause == 'FROM'
