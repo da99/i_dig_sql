@@ -305,13 +305,11 @@ class I_Dig_Sql
 
     [:ORDER_BY, :GROUP_BY, :LIMIT, :OFFSET].each { |name|
       next unless @data.has_key?(name)
-      @SQL << "\n" << %^
-        #{name.to_s.sub('_', ' ')} #{@data[name].join ', '}
-      ^
+      @SQL << "\n#{name.to_s.sub('_', ' ')} #{@data[name].join ', '}"
     }
 
     aputs @data
-    puts @SQL
+    asql(@SQL)
 
     fail "NOT rEADY"
 
@@ -434,12 +432,12 @@ class I_Dig_Sql
     if selects.empty?
       "*"
     else
-      selects.join ",\n"
+      selects.join ",\n  "
     end
   end # === def SELECT
 
   def FROM
-    @data[:FROM]
+    @data[:FROM].join ', '
   end # === def FROM
 
   def WHERE
@@ -448,7 +446,7 @@ class I_Dig_Sql
       table = self[@data[:FROM].first]
       wheres << "#{table.field(:out)} = #{@data[:OF].first}"
     end
-    wheres
+    wheres.join " AND "
   end
 
   def with_to_raw final
