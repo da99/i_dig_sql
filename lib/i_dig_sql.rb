@@ -102,6 +102,7 @@ class I_Dig_Sql
   end
 
   def search name
+    fail ArgumentError, "No name specified: #{name.inspect}" if !name
     return self if self.name == name
     found = false
     @digs.reverse.detect { |d|
@@ -204,11 +205,22 @@ class I_Dig_Sql
     sym.to_s.split('_').first.to_sym
   end
 
-  def table_name k
-    name = @data[:real_table]
-    case k
-    when :out_ftable, :in_ftable
-      "#{name}_#{ meta[prefix(k)] }_#{meta[k]}"
+  def table_name one, two = nil
+    if two
+      k = two
+      link_name = one
+    else
+      k = one
+      link_name = nil
+    end
+
+    case
+    when [:out_ftable, :in_ftable].include?(k)
+      "#{real_table}_#{ meta[prefix(k)] }_#{meta[k]}"
+
+    when link? && link_name && @data[link_name][:inner_join].include?(k)
+      "#{self.name}_#{@data[link_name][:name]}_#{k}"
+
     else
       fail ArgumentError, "Unknown key for table name: #{k.inspect}"
     end
@@ -230,6 +242,8 @@ class I_Dig_Sql
         "#{name}.#{data[args.last][:name]}"
       when [:raw, :out], [:raw, :in]
         "#{name}.#{self[:DEFAULT].data[args.last]}"
+      when [:owner_id]
+        "#{name}.owner_id"
       else
         fail ArgumentError, "Unknown args: #{args.inspect}"
       end # === case
@@ -317,43 +331,12 @@ class I_Dig_Sql
 
     @SQL = (@WITH + @FRAGMENT).strip
 
-    # aputs @data
-    # asql(@SQL)
     return @SQL
 
 
     case k
     when :where
 
-      sql[:WHERE].concat meta[:where]
-
-      sql[:WHERE] << "#{field meta, :type_id} = :#{meta[:name].to_s.upcase}_TYPE_ID"
-
-      if meta[:not_exists]
-        block = self[meta[:not_exists]]
-        w = ""
-        w << %^  NOT EXISTS (\n^
-        w << %^    SELECT 1\n^
-        w << %^    FROM #{meta[:not_exists]}\n^
-        w << %^    WHERE\n^
-
-        conds = []
-        block[:where].each { |block_meta|
-          type_id = block_meta.first
-          c = ""
-          c << %^    (\n^
-          c << "      #{field meta, block_meta[1][1], block_meta[1][2]} = #{field block, block_meta[2][1], block_meta[2][2]}\n"
-          c << "      AND\n"
-          c << "      #{meta[:not_exists]}.type_id = :#{type_id}_TYPE_ID\n"
-          c << "      AND\n"
-          c << "      #{field meta, block_meta[3][1], block_meta[3][2]} = #{field block, block_meta[4][1], block_meta[4][2]}\n"
-          c << %^    )\n^
-          conds << c
-        }
-
-        w << conds.join("    OR\n")
-        sql[:WHERE] << w
-      end
 
     when :from
 
@@ -431,7 +414,6 @@ class I_Dig_Sql
     maps  = []
     done  = {}
     while name = withs.shift
-      aputs name
       next if done[name]
       if name == :DEFAULT || !self.has_key?(name)
         done[name] = true
@@ -458,7 +440,7 @@ class I_Dig_Sql
   end # === def SELECT
 
   def FROM
-    froms = @data[:FROM]
+    froms = @data[:FROM].dup
 
     if froms.empty?
       froms << real_table
@@ -468,8 +450,51 @@ class I_Dig_Sql
       @WITHS << name if name.is_a?(Symbol)
     }
 
-    @data[:FROM].join ', '
+    if link?
+      [:out, :in].each { |link_name|
+        joins = @data[link_name][:inner_join]
+        if link_name == :out && joins.size == 2
+          keys = [[:owner_id], [:raw, link_name]]
+        else
+          keys = [[:raw, link_name]]
+        end
+        if joins
+          joins.each { |join_name|
+            froms << (
+              %^  INNER JOIN {{#{join_name}}} AS #{table_name(link_name, join_name)}\n^.<<(
+                %^    ON #{field(*(keys.shift))} = #{join_name}.id^
+              )
+            )
+          }
+        end
+      }
+
+      aputs @data
+
+    end # === if link?
+
+    return nil if froms.empty?
+
+    last   = nil
+    string = ""
+    while u = froms.shift
+      n = froms.first
+      if last && u.is_a?(String)
+        string << "\n#{u}"
+      elsif last && last.is_a?(Symbol) && u.is_a?(Symbol)
+        string << ",\n" << u.to_s
+      else
+        string << u.to_s
+      end
+      last = u
+    end
+
+    string
   end # === def FROM
+
+  def link?
+    @data[:in] && @data[:out]
+  end
 
   def WHERE
     wheres = @data[:WHERE]
@@ -478,6 +503,33 @@ class I_Dig_Sql
       table = self[@data[:FROM].first]
       wheres << "#{table.field(:out)} = #{@data[:OF].first}"
     end
+
+    if false && @data[:NOT_EXISTS]
+      block = self[meta[:not_exists]]
+      w = ""
+      w << %^  NOT EXISTS (\n^
+      w << %^    SELECT 1\n^
+      w << %^    FROM #{meta[:not_exists]}\n^
+      w << %^    WHERE\n^
+
+      conds = []
+      block[:where].each { |block_meta|
+        type_id = block_meta.first
+        c = ""
+        c << %^    (\n^
+        c << "      #{field meta, block_meta[1][1], block_meta[1][2]} = #{field block, block_meta[2][1], block_meta[2][2]}\n"
+        c << "      AND\n"
+        c << "      #{meta[:not_exists]}.type_id = :#{type_id}_TYPE_ID\n"
+        c << "      AND\n"
+        c << "      #{field meta, block_meta[3][1], block_meta[3][2]} = #{field block, block_meta[4][1], block_meta[4][2]}\n"
+        c << %^    )\n^
+        conds << c
+      }
+
+      w << conds.join("    OR\n")
+      sql[:WHERE] << w
+    end
+
 
     return nil if wheres.empty?
     wheres.join " AND "

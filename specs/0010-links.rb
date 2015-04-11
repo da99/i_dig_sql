@@ -14,33 +14,31 @@ describe "links DSL" do
         id, owner_id, screen_name
          ----------------------
 
-               ----------------------
-                       block
-                blocked  |  victim
-             screen_name | screen_name
-               ----------------------
-                 BLOCK_SCREEN_TYPE_ID
-     ( f.out = blocked AND f.in.owner_id = victim.owner_id )
-                       OR
-     ( f.in = blocked AND f.out.owner_id = victim.owner_id )
-               ----------------------
-                  BLOCK_OWNER_TYPE_ID
-( f.out.owner_id = blocked.owner_id AND f.in.owner_id  = victim.owner_id )
-                       OR
-( f.in.owner_id  = blocked.owner_id AND f.out.owner_id = victim.owner_id )
-               ----------------------
+               # ----------------------
+                       # block
+                # blocked  |  victim
+             # screen_name | screen_name
+               # ----------------------
+                 # BLOCK_SCREEN_TYPE_ID
+     # ( f.out = blocked AND f.in.owner_id = victim.owner_id )
+                       # OR
+     # ( f.in = blocked AND f.out.owner_id = victim.owner_id )
+               # ----------------------
+                  # BLOCK_OWNER_TYPE_ID
+# ( f.out.owner_id = blocked.owner_id AND f.in.owner_id  = victim.owner_id )
+                       # OR
+# ( f.in.owner_id  = blocked.owner_id AND f.out.owner_id = victim.owner_id )
+               # ----------------------
 
-                  post
-            pinner | pub
-       screen_name | screen_name, computer
-           NOT EXISTS block
-        ORDER BY created_at DESC
+                     post
+                pinner | pub
+screen_name, computer  | screen_name
+          ORDER BY created_at DESC
 
 
                 follow
               fan  |  star
        screen_name | screen_name
-             NOT EXISTS block
 
                  feed
           FROM

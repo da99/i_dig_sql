@@ -160,8 +160,20 @@ class I_Dig_Sql
 
           # inner_join_table_names | inner_join_table_name
           when ((pieces = l.split(SINGLE_PIPE)) && pieces.size == 2) && meta[:out] && meta[:in]
-            meta[:out][:inner_join] = pieces.first.split(COMMA).map(&:strip).map(&:to_sym)
-            meta[:in][:inner_join]  = pieces.last.split(COMMA).map(&:strip).map(&:to_sym)
+            outs = pieces.first.split(COMMA).map(&:strip).map(&:to_sym)
+            ins  = pieces.last.split(COMMA).map(&:strip).map(&:to_sym)
+
+            if outs.size > 2
+              fail ArgumentError, "Only one or two join tables can be specified for :out: #{pieces.last}"
+            end
+
+            if ins.size > 1
+              fail ArgumentError, "Only one join table can be specified for :in: #{pieces.last}"
+            end
+
+            meta[:out][:inner_join] = outs
+            meta[:in][:inner_join]  = ins
+
             if meta[:name] == meta[:real_table] && tables[:DEFAULT]
               meta[:real_table] = tables[:DEFAULT][:name]
             end
@@ -173,10 +185,6 @@ class I_Dig_Sql
             end
             (meta[:combos] ||= []) << {:type_id=>l.strip.to_sym, :raw=>s.join(NEW_LINE)}
  
-
-          #    NOT  EXISTS   name
-          when NOT_EXISTS(l)
-            (meta[:NOT_EXISTS] ||= []).concat l.split(NOT_EXISTS_REGEXP).last.split.map(&:to_sym)
 
           when l[ORDER_BY_REGEXP]
             (meta[:ORDER_BY] ||= []).concat l.split(ORDER_BY_REGEXP).last.split(COMMA).map(&:strip)
