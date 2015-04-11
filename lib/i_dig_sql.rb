@@ -78,6 +78,14 @@ class I_Dig_Sql
     EOF
   }
 
+  def real_table
+    if @data[:real_table] == :DEFAULT
+      self[:DEFAULT].data[:real_table]
+    else
+      @data[:real_table]
+    end
+  end
+
   def vars!
     vars = H.new.merge!(@data[:vars])
 
@@ -248,18 +256,6 @@ class I_Dig_Sql
 
       has_raw? && args.empty? ? compile_raw : compile_meta(*args)
 
-      @WITH = if @WITHS.empty?
-                ""
-              else
-                withs = @WITHS.compact.uniq
-                withs = (withs + withs.map { |k| self[k].to_meta[:WITHS] }).
-                  flatten.
-                  compact.
-                  uniq
-                str = withs.map { |k| "#{k} AS ( #{self[k].FRAGMENT} )" }.join ",\n  "
-                %{WITH\n  #{str}\n}
-              end
-      @SQL = [@WITH, @FRAGMENT].compact.join NEW_LINE
     end
 
     {FRAGMENT: @FRAGMENT, SQL: @SQL, WITH: @WITH, VARS: vars!}
@@ -291,19 +287,27 @@ class I_Dig_Sql
         end
       end
     end # === while s HAS_VAR
+
+    compile_meta
   end # === fragments_to_raw
 
   def compile_meta
-    @FRAGMENT = begin
-                  "SELECT\n  #{SELECT()}\n" +
-                    "FROM\n  #{FROM()}\n" +
-                    %^WHERE\n  #{WHERE()}\n^
-                end
+    if !@FRAGMENT
+      @FRAGMENT ||= begin
+                      [:SELECT, :FROM, :WHERE].inject("") { |memo, name|
+                        val = self.send(name)
+                        if val
+                          memo << "#{name}\n  #{val}\n"
+                        end
+                        memo
+                      }.strip
+                    end
 
-    [:ORDER_BY, :GROUP_BY, :LIMIT, :OFFSET].each { |name|
-      next unless @data.has_key?(name)
-      @FRAGMENT << "\n#{name.to_s.sub('_', ' ')} #{@data[name].join ', '}"
-    }
+      [:ORDER_BY, :GROUP_BY, :LIMIT, :OFFSET].each { |name|
+        next unless @data.has_key?(name)
+        @FRAGMENT << "\n#{name.to_s.sub('_', ' ')} #{@data[name].join ', '}"
+      }
+    end # === if !@FRAGMENT
 
     @WITH = if @WITHS.empty?
               ""
@@ -313,9 +317,10 @@ class I_Dig_Sql
 
     @SQL = (@WITH + @FRAGMENT).strip
 
-    aputs @data
-    asql(@SQL)
-    fail "NOT rEADY"
+    # aputs @data
+    # asql(@SQL)
+    return @SQL
+
 
     case k
     when :where
@@ -422,9 +427,25 @@ class I_Dig_Sql
   end # === def compile_meta
 
   def WITH
-    @WITHS.map { |name|
-        "#{name} AS (\n    #{name}\n  )"
-    }.join %^\n  ,\n  ^
+    withs = @WITHS.dup
+    maps  = []
+    done  = {}
+    while name = withs.shift
+      aputs name
+      next if done[name]
+      if name == :DEFAULT || !self.has_key?(name)
+        done[name] = true
+        next
+      end
+
+      fragment = self[name].FRAGMENT
+      fragment.gsub!(/^/, "    ") if ENV['IS_DEV']
+      maps << "#{name} AS (\n#{fragment}\n  )"
+      withs.concat self[name].WITHS
+      done[name] = true
+    end # === while name
+
+    maps.join ",\n  "
   end
 
   def SELECT
@@ -440,7 +461,7 @@ class I_Dig_Sql
     froms = @data[:FROM]
 
     if froms.empty?
-      froms << @data[:real_table]
+      froms << real_table
     end
 
     froms.each { |name|
@@ -452,10 +473,13 @@ class I_Dig_Sql
 
   def WHERE
     wheres = @data[:WHERE]
+
     if @data.has_key?(:OF)
       table = self[@data[:FROM].first]
       wheres << "#{table.field(:out)} = #{@data[:OF].first}"
     end
+
+    return nil if wheres.empty?
     wheres.join " AND "
   end
 

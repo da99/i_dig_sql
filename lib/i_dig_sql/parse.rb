@@ -220,7 +220,7 @@ class I_Dig_Sql
 
         meta[:out] = nil if meta[:out].empty?
         meta[:in]  = nil if meta[:in].empty?
-        [:FROM, :WHERE].each { |k|
+        [:SELECT, :FROM, :WHERE].each { |k|
           meta[k] = [] unless meta.has_key?(k)
         }
 

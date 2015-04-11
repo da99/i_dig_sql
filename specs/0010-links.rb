@@ -56,9 +56,7 @@ describe "links DSL" do
 
     actual = sql.to_sql(:feed)
 
-    puts "################################"
-    puts actual
-    puts "################################"
+    asql actual
 
     fail
     sql(actual).should == "a"
