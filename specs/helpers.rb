@@ -12,8 +12,6 @@ module Kernel
   end
 
   def asql raw
-    puts "----------------------"
-
     base = raw.split("\n").detect { |l|
       !l.empty?
     }

@@ -177,8 +177,8 @@ class I_Dig_Sql
     compile(*args)[:SQL]
   end
 
-  %w{ WITH FRAGMENT SQL }.each { |k|
-    eval <<-EOF.strip, nil, __FILE__, __LINE__
+  %w{ FRAGMENT SQL }.each { |k|
+    eval <<-EOF.strip, nil, __FILE__, __LINE__ + 1
       def #{k}
         return @#{k} if @SQL
         to_meta[:#{k}]
@@ -294,36 +294,30 @@ class I_Dig_Sql
   end # === fragments_to_raw
 
   def compile_meta
-    @SQL = %^
-      SELECT
-        #{SELECT()}
-      FROM
-        #{FROM()}
-      WHERE
-        #{WHERE()}
-    ^
+    @FRAGMENT = begin
+                  "SELECT\n  #{SELECT()}\n" +
+                    "FROM\n  #{FROM()}\n" +
+                    %^WHERE\n  #{WHERE()}\n^
+                end
 
     [:ORDER_BY, :GROUP_BY, :LIMIT, :OFFSET].each { |name|
       next unless @data.has_key?(name)
-      @SQL << "\n#{name.to_s.sub('_', ' ')} #{@data[name].join ', '}"
+      @FRAGMENT << "\n#{name.to_s.sub('_', ' ')} #{@data[name].join ', '}"
     }
+
+    @WITH = if @WITHS.empty?
+              ""
+            else
+              %^WITH\n  #{WITH()}\n\n^
+            end
+
+    @SQL = (@WITH + @FRAGMENT).strip
 
     aputs @data
     asql(@SQL)
-
     fail "NOT rEADY"
 
-    k = nil
     case k
-
-    when :name
-
-    when :select
-      sql[:SELECT].concat(meta[:select] || ['*'])
-
-    when :of
-      sql[:WHERE] << %^#{meta[:from].first}.owner_id = #{meta[:of].inspect}^
-
     when :where
 
       sql[:WHERE].concat meta[:where]
@@ -427,6 +421,12 @@ class I_Dig_Sql
     s
   end # === def compile_meta
 
+  def WITH
+    @WITHS.map { |name|
+        "#{name} AS (\n    #{name}\n  )"
+    }.join %^\n  ,\n  ^
+  end
+
   def SELECT
     selects = @data[:SELECT]
     if selects.empty?
@@ -437,6 +437,16 @@ class I_Dig_Sql
   end # === def SELECT
 
   def FROM
+    froms = @data[:FROM]
+
+    if froms.empty?
+      froms << @data[:real_table]
+    end
+
+    froms.each { |name|
+      @WITHS << name if name.is_a?(Symbol)
+    }
+
     @data[:FROM].join ', '
   end # === def FROM
 
