@@ -28,9 +28,10 @@ class I_Dig_Sql
     @digs  = []
     @data  = H.new(:allow_update)
     .merge!(
-      :name =>nil,
-      :raw  =>nil,
-      :vars =>H.new
+      :name  => nil,
+      :raw   => nil,
+      :vars  => H.new,
+      :procs => H.new
     )
 
     args.each { |a|
@@ -89,12 +90,20 @@ class I_Dig_Sql
     fail ArgumentError, "No name specified: #{name.inspect}" if !name
     return self if self.name == name
     found = false
+    if @data[:procs].has_key?(name)
+      return @data[:procs][name]
+    end
+
     @digs.reverse.detect { |d|
       found = if d.name == name
                 d
+              elsif d.data[:procs].has_key?(name)
+                d.data[:procs][name]
               else
                 d.digs.detect { |deep|
-                  deep.name == name
+                  found = deep if deep.name == name
+                  found = deep.data[:procs][name] if deep.data[:procs].has_key?(name)
+                  found
                 }
               end
     }
@@ -126,6 +135,9 @@ class I_Dig_Sql
 
     when I_Dig_Sql
       @digs << val
+
+    when Proc
+      @data[:procs][name] = val
 
     else
       fail ArgumentError, "Unknown class: #{name.inspect} -> #{val.class}"
@@ -232,7 +244,7 @@ class I_Dig_Sql
   )
 
   protected def compile target = nil
-    return(self[*args].compile) if target && target != name
+    return(self[target].compile) if target && target != name
 
     if !@SQL
       compile_raw
@@ -255,16 +267,35 @@ class I_Dig_Sql
 
       s.gsub!(/\<\<\s?([a-zA-Z0-9\_\-\ \*]+)\s?\>\>/) do |match|
         tokens = $1.split
-        key    = tokens.pop.to_sym
-        field  = tokens.empty? ? nil : tokens.join(' ')
 
-        case
-        when field
-          @WITHS << key
-          "SELECT #{field} FROM #{key}"
+        key = tokens.last.to_sym
+
+        if has_key?(key)
+
+          tokens.pop
+          target = self[key]
+
+          if target.is_a?(Proc)
+            target.call self, *tokens
+          else
+            field  = tokens.empty? ? nil : tokens.join(' ')
+
+            if field
+              @WITHS << key
+              tokens.pop
+              "SELECT #{field} FROM #{key}"
+            else
+              target.to_sql
+            end
+          end
+
+        elsif has_key?(tokens.first.to_sym)
+          self[tokens.shift.to_sym].call self, *tokens
+
         else
-          self[key].to_sql
-        end
+          fail ArgumentError, "Not found: #{$1}"
+
+        end # === if has_key?
       end
     end # === while s HAS_VAR
 
