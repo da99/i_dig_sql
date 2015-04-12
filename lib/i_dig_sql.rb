@@ -291,8 +291,8 @@ class I_Dig_Sql
             end
           end
 
-        elsif has_key?(tokens.first.to_sym)
-          self[tokens.shift.to_sym].call self, *tokens
+        elsif has_key?(tokens.first)
+          self[tokens.shift].call self, *tokens
 
         else
           fail ArgumentError, "Not found: #{$1}"
