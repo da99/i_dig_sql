@@ -259,13 +259,13 @@ class I_Dig_Sql
     s = @FRAGMENT = @data[:raw].dup
 
     while s[HAS_VAR] 
-      s.gsub!(/\{\{\s?([a-zA-Z0-9\_]+)\s?\}\}/) do |match|
+      s.gsub!(/\{\{\s?([^\}]+)\s?\}\}/) do |match|
         key = $1.to_sym
         @WITHS << key
         key
       end
 
-      s.gsub!(/\<\<\s?([a-zA-Z0-9\_\-\ \*]+)\s?\>\>/) do |match|
+      s.gsub!(/\<\<\s?([^\>]+)\s?\>\>/) do |match|
         tokens = $1.split
 
         key = tokens.last.to_sym

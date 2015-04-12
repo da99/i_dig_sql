@@ -37,4 +37,17 @@ describe :funcs do
     ^)
   end # === it
 
+  it "allows ? and ! in the name" do
+    sql = I_Dig_Sql.new :q, <<-EOF
+      << name! Hans >>
+      << name? Hoppe >>
+    EOF
+    sql[:name!] = lambda { |dig, arg| "not! #{arg}" }
+    sql[:name?] = lambda { |dig, arg| "is? #{arg}" }
+    sql(sql).should == sql(%^
+      not! Hans
+      is? Hoppe
+    ^)
+  end # === it
+
 end # === describe :funcs
