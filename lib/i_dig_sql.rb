@@ -9,6 +9,8 @@ class I_Dig_Sql
   SELECT_FROM_REG = /SELECT.+FROM.+/
 
 
+  COMMAS_OR_COLONS = /(\,|\:)+/
+  NOTHING          = "".freeze
   ALL_UNDERSCORE   = /\A[_]+\Z/
   COMBO_LEFT_RIGHT = [:left, :left, :right, :right]
   COMBO_OUT_IN     = [:out, :in, :out, :in]
@@ -266,9 +268,9 @@ class I_Dig_Sql
       end
 
       s.gsub!(/\<\<\s?([^\>]+)\s?\>\>/) do |match|
-        tokens = $1.split
+        tokens = $1.gsub(COMMAS_OR_COLONS, NOTHING).split.map(&:to_sym)
 
-        key = tokens.last.to_sym
+        key = tokens.last
 
         if has_key?(key)
 

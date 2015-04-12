@@ -50,4 +50,34 @@ describe :funcs do
     ^)
   end # === it
 
+  it "passes Symbols to the lambda" do
+    sql = I_Dig_Sql.new :q, <<-EOF
+      << name! Hans >>
+    EOF
+    sql[:name!] = lambda { |dig, arg| "#{arg.class}" }
+    sql(sql).should == sql(%^
+       Symbol
+    ^)
+  end # === it
+
+  it "ignores colons among arguments" do
+    sql = I_Dig_Sql.new :q, <<-EOF
+      << names :Hans, :Hoppe >>
+    EOF
+    sql[:names] = lambda { |dig, *args| "#{args.join " -- "}" }
+    sql(sql).should == sql(%^
+       Hans -- Hoppe
+    ^)
+  end # === it
+
+  it "ignores commas among arguments" do
+    sql = I_Dig_Sql.new :q, <<-EOF
+      << names Hans, Hoppe >>
+    EOF
+    sql[:names] = lambda { |dig, *args| "#{args.join " - "}" }
+    sql(sql).should == sql(%^
+       Hans - Hoppe
+    ^)
+  end # === it
+
 end # === describe :funcs
