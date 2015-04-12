@@ -1,6 +1,5 @@
 
 require "i_dig_sql/H"
-require "i_dig_sql/parse"
 
 class I_Dig_Sql
 
@@ -45,17 +44,10 @@ class I_Dig_Sql
         @digs << a
 
       when String
-        tables = self.class.parse(a)
-        if tables.size == 1 && tables.first[:raw]
-          @data.merge! tables.first
-        else
-          tables.map { |t|
-            self[t[:name]] = t
-          }
-        end
+        @data.merge!(:raw=>a)
 
       when Hash, H
-        if a.has_key?(:raw) || a.has_key?(:unparsed) || a.has_key?(:in) || a.has_key?(:real_table)
+        if a.has_key?(:raw)
           @data.merge! a
         else
           @data[:vars].merge! a
@@ -70,21 +62,13 @@ class I_Dig_Sql
 
   end # === def initialize
 
-  %w{name in out raw vars}.each { |k|
+  %w{name raw vars}.each { |k|
     eval <<-EOF.strip, nil, __FILE__, __LINE__
       def #{k}
         @data[:#{k}]
       end
     EOF
   }
-
-  def real_table
-    if @data[:real_table] == :DEFAULT
-      self[:DEFAULT].data[:real_table]
-    else
-      @data[:real_table]
-    end
-  end
 
   def vars!
     vars = H.new.merge!(@data[:vars])
@@ -161,13 +145,7 @@ class I_Dig_Sql
 
 
   def << str
-    if IS_RAW(str)
-      (@data[:raw] ||= "") << str
-    else
-      self.class.parse(str).each { |name, t|
-        self[name] = t
-      }
-    end
+    (@data[:raw] ||= "") << str
   end
 
   def has_raw?
@@ -253,25 +231,11 @@ class I_Dig_Sql
     end # === def field
   )
 
-  def table_name_to_raw key, final
-    target = self[key]
-
-    if target.is_a?(String)
-      fragments_to_raw([target], final)
-      return
-    end
-
-    final[:RAW] << "-- i_dig_sql: #{key.inspect}"
-    final[:RAW] << meta_to_fragment(target, final)
-  end
-
-  protected def compile *args
-    return(self[*args].compile) if args.first && args.first != name
+  protected def compile target = nil
+    return(self[*args].compile) if target && target != name
 
     if !@SQL
-
-      has_raw? && args.empty? ? compile_raw : compile_meta(*args)
-
+      compile_raw
     end
 
     {FRAGMENT: @FRAGMENT, SQL: @SQL, WITH: @WITH, VARS: vars!}
@@ -304,27 +268,6 @@ class I_Dig_Sql
       end
     end # === while s HAS_VAR
 
-    compile_meta
-  end # === fragments_to_raw
-
-  def compile_meta
-    if !@FRAGMENT
-      @FRAGMENT ||= begin
-                      [:SELECT, :FROM, :WHERE].inject("") { |memo, name|
-                        val = self.send(name)
-                        if val
-                          memo << "#{name}\n  #{val}\n"
-                        end
-                        memo
-                      }.strip
-                    end
-
-      [:ORDER_BY, :GROUP_BY, :LIMIT, :OFFSET].each { |name|
-        next unless @data.has_key?(name)
-        @FRAGMENT << "\n#{name.to_s.sub('_', ' ')} #{@data[name].join ', '}"
-      }
-    end # === if !@FRAGMENT
-
     @WITH = if @WITHS.empty?
               ""
             else
@@ -332,84 +275,7 @@ class I_Dig_Sql
             end
 
     @SQL = (@WITH + @FRAGMENT).strip
-
-    return @SQL
-
-
-    case k
-    when :where
-
-
-    when :from
-
-      last = nil
-
-      (meta[:from].empty? ? [meta[:name]] : meta[:from]).each_with_index { |k, i|
-        string = ""
-        final[:WITH] << k
-        table = self[k]
-
-        if !last
-          string << (meta[:from].empty? ? "link AS #{k}" : k.to_s)
-
-          [:out_ftable, :in_ftable].each { |ftable|
-            if meta[ftable]
-              final[:WITH] << meta[ftable]
-              string << %^\n  LEFT JOIN #{meta[ftable]} AS #{table_name meta, ftable}^
-              string << %^\n    ON #{field meta, prefix_raw(ftable)} = #{meta[ftable]}.id^
-            end
-          }
-
-        else
-          string << %^\n  INNER JOIN #{table[:name]}\n^
-          string << %^    ON #{ field last, :in } = #{ field table, :out }^
-        end # === if !last
-
-        sql[:FROM] << string
-        last = table
-
-      } # === meta each_with_index
-
-    when :order_by
-      sql[:ORDER_BY].concat(
-        meta[:order_by].map { |unknown|
-          case unknown
-          when Array
-            unknown.join ' '.freeze
-          when String
-            unknown
-          else
-            fail ArgumentError, "Unknown type for :order_by: #{unknown.class}"
-          end
-        }
-      )
-
-    when :group_by
-      sql[:GROUP_BY].concat meta[:group_by]
-
-    else
-      fail "Programmer Error: unknown key #{k.inspect}"
-
-    end # === each
-
-    s = ""
-    s << %^SELECT\n  #{sql[:SELECT].join ",\n  "}\n^
-    s << %^FROM\n  #{sql[:FROM].join "\n  "}\n^
-
-    if !sql[:WHERE].empty?
-      s << %^WHERE\n  #{sql[:WHERE].join "\n  AND\n"}\n^
-    end
-
-    if !sql[:ORDER_BY].empty?
-      s << %^ORDER BY #{sql[:ORDER_BY].join ", "}\n^
-    end
-
-    if !sql[:GROUP_BY].empty?
-      s << %^GROUP BY #{sql[:GROUP_BY].join ", "}\n^
-    end
-
-    s
-  end # === def compile_meta
+  end # === fragments_to_raw
 
   def WITH
     withs = @WITHS.dup
@@ -430,70 +296,6 @@ class I_Dig_Sql
     end # === while name
 
     maps.join ",\n  "
-  end
-
-  def SELECT
-    selects = @data[:SELECT]
-    if selects.empty?
-      "*"
-    else
-      selects.join ",\n  "
-    end
-  end # === def SELECT
-
-  def FROM
-    froms = @data[:FROM].dup
-
-    if froms.empty? && link?
-      froms << "#{real_table} AS #{name}"
-    end
-
-    froms.each { |name|
-      @WITHS << name if name.is_a?(Symbol)
-    }
-
-    if link?
-      [:out, :in].each { |link_name|
-        joins = @data[link_name][:inner_join]
-        if link_name == :out && joins.size == 2
-          keys = [[:owner_id], [:raw, link_name]]
-        else
-          keys = [[:raw, link_name]]
-        end
-        if joins
-          joins.each { |join_name|
-            froms << (
-              %^  INNER JOIN {{#{join_name}}} AS #{table_name(link_name, join_name)}\n^.<<(
-                %^    ON #{field(*(keys.shift))} = #{join_name}.id^
-              )
-            )
-          }
-        end
-      }
-
-    end # === if link?
-
-    return nil if froms.empty?
-
-    last   = nil
-    string = ""
-    while u = froms.shift
-      n = froms.first
-      if last && u.is_a?(String)
-        string << "\n#{u}"
-      elsif last && last.is_a?(Symbol) && u.is_a?(Symbol)
-        string << ",\n" << u.to_s
-      else
-        string << u.to_s
-      end
-      last = u
-    end
-
-    string
-  end # === def FROM
-
-  def link?
-    @data[:in] && @data[:out]
   end
 
   def WHERE
@@ -607,36 +409,6 @@ class I_Dig_Sql
     return nil if wheres.empty?
     wheres.join " AND "
   end
-
-  def with_to_raw final
-    withs    = final[:WITH].dup
-    used     = []
-    compiled = []
-
-    while k = withs.shift
-      next if used.include?(k)
-
-      size = withs.size
-      case k
-      when Symbol
-        withs.unshift self[k]
-
-      when I_Dig_Sql
-        compiled << %^#{k.name} AS ( #{k.raw} )^
-      else
-        fail ArgumentError, "Unknown type for :WITH: #{k.class}"
-      end
-
-      used << k
-
-      if size != final[:WITH].size
-        withs.concat final[:WITH]
-      end
-    end # === while
-
-    final[:WITH!] = compiled
-
-  end # === def with_to_raw
 
   # === END: Rendering DSL ==========================================
 
