@@ -26,7 +26,6 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "Bacon_Colored"      , '> 0'
   spec.add_development_dependency "pry"                , '> 0'
   spec.add_development_dependency "awesome_print"      , '> 0'
-  spec.add_development_dependency "anbt-sql-formatter" , '> 0'
   spec.add_development_dependency "rouge" , '> 0.0.0'
   spec.add_development_dependency "unindent" , '> 0.0.0'
 end
