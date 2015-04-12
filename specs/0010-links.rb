@@ -14,11 +14,12 @@ describe "links DSL" do
         id, owner_id, screen_name
          ----------------------
 
-               # ----------------------
-                       # block
-                # blocked  |  victim
-             # screen_name | screen_name
-               # ----------------------
+               ----------------------
+                       block
+                blocked  |  victim
+             screen_name | screen_name
+               ----------------------
+
                  # BLOCK_SCREEN_TYPE_ID
      # ( f.out = blocked AND f.in.owner_id = victim.owner_id )
                        # OR

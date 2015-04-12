@@ -205,26 +205,28 @@ class I_Dig_Sql
     sym.to_s.split('_').first.to_sym
   end
 
-  def table_name one, two = nil
-    if two
-      k = two
-      link_name = one
-    else
-      k = one
-      link_name = nil
+  protected(
+    def table_name one, two = nil
+      if two
+        k = two
+        link_name = one
+      else
+        k = one
+        link_name = nil
+      end
+
+      case
+      when [:out_ftable, :in_ftable].include?(k)
+        "#{real_table}_#{ meta[prefix(k)] }_#{meta[k]}"
+
+      when link? && link_name && @data[link_name][:inner_join].include?(k)
+        "#{self.name}_#{@data[link_name][:name]}_#{k}"
+
+      else
+        fail ArgumentError, "Unknown key for table name: #{k.inspect}"
+      end
     end
-
-    case
-    when [:out_ftable, :in_ftable].include?(k)
-      "#{real_table}_#{ meta[prefix(k)] }_#{meta[k]}"
-
-    when link? && link_name && @data[link_name][:inner_join].include?(k)
-      "#{self.name}_#{@data[link_name][:name]}_#{k}"
-
-    else
-      fail ArgumentError, "Unknown key for table name: #{k.inspect}"
-    end
-  end
+  ) # === protected
 
   #
   # Examples:
@@ -242,8 +244,8 @@ class I_Dig_Sql
         "#{name}.#{data[args.last][:name]}"
       when [:raw, :out], [:raw, :in]
         "#{name}.#{self[:DEFAULT].data[args.last]}"
-      when [:owner_id]
-        "#{name}.owner_id"
+      when [:owner_id], [:type_id]
+        "#{name}.#{args.first}"
       else
         fail ArgumentError, "Unknown args: #{args.inspect}"
       end # === case
@@ -442,8 +444,8 @@ class I_Dig_Sql
   def FROM
     froms = @data[:FROM].dup
 
-    if froms.empty?
-      froms << real_table
+    if froms.empty? && link?
+      froms << "#{real_table} AS #{name}"
     end
 
     froms.each { |name|
@@ -468,8 +470,6 @@ class I_Dig_Sql
           }
         end
       }
-
-      aputs @data
 
     end # === if link?
 
@@ -497,7 +497,80 @@ class I_Dig_Sql
   end
 
   def WHERE
-    wheres = @data[:WHERE]
+    wheres = @data[:WHERE].dup
+
+    if link? && name != :block
+      wheres << "#{field :type_id} = :#{name.to_s.upcase}_TYPE_ID"
+
+      pattern = [ data[:out][:inner_join], data[:in][:inner_join] ]
+      left, mid = data[:out][:inner_join]
+      right, _  = *data[:in][:inner_join]
+
+
+      case
+      when [[:screen_name], [:screen_name]], [[:screen_name, :computer],[:screen_name]]
+        # do nothing
+      else
+        fail "Programmer Error: Permissions not implemented for: #{pattern.inspect}"
+      end # === case
+
+      if left == :screen_name && right == :screen_name
+        default = self[:DEFAULT]
+        block   = self[:block]
+        blocked = block.table_name(:out, :screen_name)
+        victim  = block.table_name(:in, :screen_name)
+        f_in    = table_name :in, :screen_name
+        f_out   = table_name :out, :screen_name
+
+        wheres << %^
+        NOT EXISTS (
+          SELECT 1
+          FROM #{block.real_table} AS block
+          WHERE
+            (
+              block.type_id = :BLOCK_SCREEN_TYPE_ID
+              AND (
+                (
+                  #{f_out}.owner_id = #{block.field :out}
+                  AND
+                  #{f_in}.owner_id = #{victim}.owner_id
+                )
+                OR
+                (
+                  #{field :raw, :in} = #{block.field :out}
+                  AND
+                  #{blocked}.owner_id = #{victim}.owner_id
+                )
+              )
+            )
+            OR
+            (
+              block.type_id = :BLOCK_OWNER_TYPE_ID
+              AND (
+                (
+                  #{f_out}.owner_id = #{blocked}.owner_id
+                  AND
+                  #{f_in}.owner_id = #{victim}.owner_id
+                )
+                OR
+                (
+                  #{f_in}.owner_id = #{blocked}.owner_id
+                  AND
+                  #{f_out}.owner_id = #{victim}.owner_id
+                )
+              ) -- AND
+            )
+        ) -- NOT EXISTS
+        ^
+      end # === if :screen_name, :screen_name
+
+      if mid == :computer
+        asql(wheres.last)
+        aputs table_name(:out, :computer)
+        fail "COMPUTER not ready"
+      end
+
+    end # === if link?
 
     if @data.has_key?(:OF)
       table = self[@data[:FROM].first]
