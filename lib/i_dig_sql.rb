@@ -399,7 +399,6 @@ class I_Dig_Sql
 
       if mid == :computer
         asql(wheres.last)
-        aputs table_name(:out, :computer)
         fail "COMPUTER not ready"
       end
 
