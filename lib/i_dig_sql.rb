@@ -114,7 +114,7 @@ class I_Dig_Sql
 
   def [] name
     found = search(name)
-    fail ArgumentError, "SQL not found for: #{name.inspect}" unless found
+    fail ArgumentError, "SQL not found: #{name.inspect}" unless found
     found
   end
 
@@ -262,7 +262,8 @@ class I_Dig_Sql
 
     while s[HAS_VAR] 
       s.gsub!(/\{\{\s?([^\}]+)\s?\}\}/) do |match|
-        key = $1.to_sym
+        key = $1.strip.to_sym
+        self[key]
         @WITHS << key
         key
       end
