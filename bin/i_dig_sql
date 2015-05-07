@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# -*- bash -*-
+#
+#
+
+action="$1"
+shift
+
+if [[ -z "$action" ]]; then
+  action="test"
+fi
+# ===============================================================
+
+set -u -e -o pipefail
+
+case "$action" in
+
+  "help")
+    echo " ====================================================="
+    echo ""
+    echo " $  i_dig_sql   watch"
+    echo ""
+    echo " $  i_dig_sql   test"
+    echo " $  i_dig_sql   test   name"
+    echo ""
+    echo " ====================================================="
+    echo ""
+    exit 0
+    ;;  # === start
+
+  "watch")
+    shift
+
+    echo ""
+    echo "=== Watching: $@"
+
+    echo -e "\n=== Running test:"
+    bin/i_dig_sql "$@" || echo ""
+
+    inotifywait -q -m -e close_write,close --exclude .git/ -r .  | while read CHANGE
+    do
+
+      dir=$(echo "$CHANGE" | cut -d' ' -f 1)
+      op=$(echo "$CHANGE" | cut -d' ' -f 2)
+      file=$(echo "$CHANGE" | cut -d' ' -f 3)
+      path="${dir}$file"
+
+      if [[ "$op" == *CLOSE_WRITE* && $file == *.rb*  ]]; then
+        echo -e "\n=== Running test:"
+        bin/i_dig_sql "$@" || echo ""
+      fi
+
+    done # === do
+
+    echo ""
+    exit 0
+    ;;
+
+
+  "test")
+    files="$(echo specs/*-$@.rb)"
+    if [[ -f "$files" ]]; then
+      shift
+    else
+      files="$(echo specs/*-*.rb)"
+    fi
+
+    bundle exec bacon -rpry -ri_dig_sql specs/helpers.rb $files "$@"
+    ;; # === test
+
+
+  *)
+    echo "=== Unknown action: $action" 1>&2
+    exit 1
+    ;;
+
+esac # =========================================================
+
