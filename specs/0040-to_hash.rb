@@ -17,7 +17,7 @@ describe ":to_hash" do
     h.should == {'SELECT'=>['key_name', 'another_key'], 'FROM'=>['t1, t2']}
   end # === it
 
-  it "replaces underscores with table name" do
+  it "replaces underscores when: t1 \\n INNER JOIN t2" do
     h = I_Dig_Sql.to_hash <<-EOF
       SELECT
         key_name
@@ -29,6 +29,20 @@ describe ":to_hash" do
     h.should == {
       'SELECT' => ['key_name'],
       'FROM'   => ['t1', 'INNER JOIN t2', 'ON t2.owner_id == t1.id']
+    }
+  end # === it
+
+  it "replaces underscores when: t1 AS table_1 INNER JOIN t2 AS table_2" do
+    h = I_Dig_Sql.to_hash <<-EOF
+      SELECT
+        key_name
+      FROM
+        t1 AS table_1 INNER JOIN t2 AS table_2
+          ON _.owner_id == __.id
+    EOF
+    h.should == {
+      'SELECT' => ['key_name'],
+      'FROM'   => ['t1 AS table_1 INNER JOIN t2 AS table_2', 'ON table_2.owner_id == table_1.id']
     }
   end # === it
 
