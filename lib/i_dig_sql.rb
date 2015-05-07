@@ -1,5 +1,6 @@
 
 require "i_dig_sql/H"
+require "i_dig_sql/to_hash"
 
 class I_Dig_Sql
 

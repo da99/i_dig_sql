@@ -29,13 +29,11 @@ case "$action" in
     ;;  # === start
 
   "watch")
-    shift
-
     echo ""
     echo "=== Watching: $@"
 
     echo -e "\n=== Running test:"
-    bin/i_dig_sql "$@" || echo ""
+    bin/i_dig_sql test "$@" || echo ""
 
     inotifywait -q -m -e close_write,close --exclude .git/ -r .  | while read CHANGE
     do
@@ -47,7 +45,7 @@ case "$action" in
 
       if [[ "$op" == *CLOSE_WRITE* && $file == *.rb*  ]]; then
         echo -e "\n=== Running test:"
-        bin/i_dig_sql "$@" || echo ""
+        bin/i_dig_sql test "$@" || echo ""
       fi
 
     done # === do
