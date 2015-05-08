@@ -1,8 +1,9 @@
 
 class I_Dig_Sql
 
-  END_COMMA = /,\Z/
+  END_COMMA  = /,\Z/
   TABLE_NAME = /[a-z0-9\_]+/
+  JOIN       = /\ *[A-Z]+\ *JOIN\ +/
 
   class << self
 
@@ -35,11 +36,11 @@ class I_Dig_Sql
       h['FROM'].each { |line|
         case
 
-        when from.empty? && line[/\A\ *(#{TABLE_NAME})(\ +AS\ +(#{TABLE_NAME}))?\ *\Z/]
-          tables << ($3 || $1)
+        when from.empty? && !line[JOIN]
+          tables << line.split.last
 
-        when line['JOIN ']
-          pieces = line.split(/\ *[A-Z]+\ *JOIN\ +/)
+        when line[JOIN]
+          pieces = line.split(JOIN)
           while table = pieces.shift
             name = table.split.last
             tables << name if name
