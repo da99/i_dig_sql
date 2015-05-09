@@ -1,6 +1,6 @@
 
 require "i_dig_sql/H"
-require "i_dig_sql/to_hash"
+require "i_dig_sql/box"
 
 class I_Dig_Sql
 
@@ -138,6 +138,9 @@ class I_Dig_Sql
 
     when I_Dig_Sql
       @digs << val
+
+    when Box
+      @digs << I_Dig_Sql.new(self, name, self.class.box_to_string(val))
 
     when Proc
       @data[:procs][name] = val
