@@ -7,18 +7,18 @@ describe ":box" do
 
       from(:n) {
         as :notes
-        field :long_name, :name
+        select :long_name, :name
       }
 
       left(:f) {
         as :fails
         on '_.n = __.n'
-        field :long_name, :name
+        select :long_name, :name
       }
 
     end
 
-    sql[:joins].data[:raw].should == %^
+    sql(sql[:joins].SQL).should == sql(%^
       SELECT
         notes.long_name AS name,
         fails.long_name AS name
@@ -26,7 +26,7 @@ describe ":box" do
         n notes
         LEFT JOIN f fails
         ON fails.n = notes.n
-    ^
+    ^)
   end # === it
 
 end # === describe ":box"

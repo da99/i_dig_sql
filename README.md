@@ -26,6 +26,24 @@ Please note that none of this is ready yet.
   sql = I_Dig_Sql.new
   sql[:HEROES]   = "SELECT id FROM hero    WHERE id = :PERSON_ID"
   sql[:VILLIANS] = "SELECT id FROM villian WHERE id = :PERSON_ID"
+
+  sql.push(:SIDE_KICKS) {
+
+    from :HEROES, :good_guys do
+      select :nick_name, :name
+    end
+
+    inner :PEOPLE, :others do
+      on '_.heroe_id == __.id'
+      select :nick_name, :name
+    end
+
+    select 'field' => 'a_field'
+
+    group_by 'id DESC', 'created_at ASC'
+
+  }
+
   sql << %^
     SELECT *
     FROM people
@@ -41,7 +59,7 @@ Please note that none of this is ready yet.
       id IN ( << VILLIANS >> )
   ^
 
-  sql.to_sql
+  puts sql.to_sql
 
 ```
 

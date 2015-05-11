@@ -1,64 +1,55 @@
 
-require "i_dig_sql/H"
-require "i_dig_sql/box"
-
 class I_Dig_Sql
 
-  include Enumerable
+  METHODS = [
+    :FROM,
+    :LEFT,
+    :RIGHT,
+    :INNER,
+    :AS,
+    :COLLECT,
+    [:GROUP_BY, :ORDER_BY, :ON, :SELECT, :ON]
+  ]
 
-  HAS_VAR = /(\{\{|\<\<)[^\}\>]+(\}\}|\>\>)/
-  SELECT_FROM_REG = /SELECT.+FROM.+/
-
-
+  HAS_VAR          = /(\{\{|\<\<)[^\}\>]+(\}\}|\>\>)/
+  SELECT_FROM_REG  = /SELECT.+FROM.+/
   COMMAS_OR_COLONS = /(\,|\:)+/
-  NOTHING          = "".freeze
   ALL_UNDERSCORE   = /\A[_]+\Z/
-  COMBO_LEFT_RIGHT = [:left, :left, :right, :right]
-  COMBO_OUT_IN     = [:out, :in, :out, :in]
-
-  Duplicate = Class.new RuntimeError
+  NOTHING          = "".freeze
 
   class << self
   end # === class self ===
 
-  attr_reader :digs, :WITHS, :data
   def initialize *args
-    @WITH     = nil
-    @FRAGMENT = nil
-    @SQL      = nil
-    @WITHS    = []
-
-    @digs  = []
-    @data  = H.new(:allow_update)
-    .merge!(
-      :name  => nil,
-      :raw   => nil,
-      :vars  => H.new,
-      :procs => H.new
-    )
+    @stack = []
+    @data  = {}
+    @meta  = {
+      :name     => nil,
+      :alias    => nil,
+      :raw      => nil,
+      :fragment => nil,
+      :sql      => nil
+    }
 
     args.each { |a|
 
       case a
 
       when Symbol
-        @data[:name] = a
-
-      when I_Dig_Sql
-        @digs << a
-
-      when String
-        @data.merge!(:raw=>a)
-
-      when Hash, H
-        if a.has_key?(:raw)
-          @data.merge! a
+        if @data[:name]
+          @data[:alias] = a
         else
-          @data[:vars].merge! a
+          @data[:name] = a
         end
 
+      when String
+        @data[:fragment] = a
+
+      when Hash
+        @data.merge! a
+
       else
-        fail ArgumentError, "Unknown arg: #{a.inspect}"
+        fail ArgumentError, "Invalid arg to init: #{a.inspect}"
 
       end  # === case
 
@@ -66,108 +57,26 @@ class I_Dig_Sql
 
   end # === def initialize
 
-  %w{name raw vars}.each { |k|
+  %w{name alias raw fragment sql}.each { |k|
     eval <<-EOF.strip, nil, __FILE__, __LINE__
       def #{k}
-        @data[:#{k}]
+        @meta[:#{k}]
       end
     EOF
   }
 
-  def vars!
-    vars = H.new.merge!(@data[:vars])
-
-    @digs.reverse.inject(vars) { |memo, dig|
-      if dig != self
-        memo.merge! dig.vars
-      end
-      memo
-    }
-  end
-
-  def has_key? name
-    !!(search name)
-  end
-
-  def search name
-    fail ArgumentError, "No name specified: #{name.inspect}" if !name
-    return self if self.name == name
-    found = false
-    if @data[:procs].has_key?(name)
-      return @data[:procs][name]
-    end
-
-    @digs.reverse.detect { |d|
-      found = if d.name == name
-                d
-              elsif d.data[:procs].has_key?(name)
-                d.data[:procs][name]
-              else
-                d.digs.detect { |deep|
-                  found = deep if deep.name == name
-                  found = deep.data[:procs][name] if deep.data[:procs].has_key?(name)
-                  found
-                }
-              end
-    }
-    found
-  end
-
   def [] name
-    found = search(name)
-    fail ArgumentError, "SQL not found: #{name.inspect}" unless found
-    found
+    fail ArgumentError, "Value not found: #{name.inspect}" unless @data.has_key?(name)
+    @data[name]
   end
 
   def []= name, val
-    fail ArgumentError, "Name already taken: #{name.inspect}" if has_key?(name)
-
-    case val
-    when String
-      @digs << I_Dig_Sql.new(self, name, val)
-
-    when Hash, H
-      case
-      when val[:name] == :DEFAULT
-        @digs << I_Dig_Sql.new(:DEFAULT, val)
-      when val[:raw]
-        @data.merge! val
-      else
-        @digs << I_Dig_Sql.new(self, name, val)
-      end
-
-    when I_Dig_Sql
-      @digs << val
-
-    when Box
-      @digs << I_Dig_Sql.new(self, name, self.class.box_to_string(val))
-
-    when Proc
-      @data[:procs][name] = val
-
-    else
-      fail ArgumentError, "Unknown class: #{name.inspect} -> #{val.class}"
-
-    end # === case
+    fail ArgumentError, "Name already taken: #{name.inspect}" if @data.has_key?(name)
+    @data[name] = val
   end
-
-  def each
-    digs = @digs.reverse
-    digs.unshift self
-    if block_given?
-      digs.each { |d| yield d.name, d }
-    else
-      digs.each
-    end
-  end
-
 
   def << str
-    (@data[:raw] ||= "") << str
-  end
-
-  def has_raw?
-    !!(@data[:raw] && !@data[:raw].strip.empty?)
+    (@meta[:fragment] ||= "") << str
   end
 
   def to_pair
@@ -178,20 +87,7 @@ class I_Dig_Sql
     compile *args
   end
 
-  def to_sql *args
-    compile(*args)[:SQL]
-  end
-
-  %w{ FRAGMENT SQL }.each { |k|
-    eval <<-EOF.strip, nil, __FILE__, __LINE__ + 1
-      def #{k}
-        return @#{k} if @SQL
-        to_meta[:#{k}]
-      end
-    EOF
-  }
-
-  private # ==========================================
+  protected # ====================================================
 
   def prefix_raw sym
     "raw_#{sym.to_s.split('_').first}".to_sym
@@ -201,28 +97,47 @@ class I_Dig_Sql
     sym.to_s.split('_').first.to_sym
   end
 
-  protected(
-    def table_name one, two = nil
-      if two
-        k = two
-        link_name = one
-      else
-        k = one
-        link_name = nil
+  def WITH
+    withs = @WITHS.dup
+    maps  = []
+    done  = {}
+    while name = withs.shift
+      next if done[name]
+      if name == :DEFAULT || !self.has_key?(name)
+        done[name] = true
+        next
       end
 
-      case
-      when [:out_ftable, :in_ftable].include?(k)
-        "#{real_table}_#{ meta[prefix(k)] }_#{meta[k]}"
+      fragment = self[name].FRAGMENT
+      fragment.gsub!(/^/, "    ") if ENV['IS_DEV']
+      maps << "#{name} AS (\n#{fragment}\n  )"
+      withs.concat self[name].WITHS
+      done[name] = true
+    end # === while name
 
-      when link? && link_name && @data[link_name][:inner_join].include?(k)
-        "#{self.name}_#{@data[link_name][:name]}_#{k}"
+    maps.join ",\n  "
+  end
 
-      else
-        fail ArgumentError, "Unknown key for table name: #{k.inspect}"
-      end
+  def table_name one, two = nil
+    if two
+      k = two
+      link_name = one
+    else
+      k = one
+      link_name = nil
     end
-  ) # === protected
+
+    case
+    when [:out_ftable, :in_ftable].include?(k)
+      "#{real_table}_#{ meta[prefix(k)] }_#{meta[k]}"
+
+    when link? && link_name && @data[link_name][:inner_join].include?(k)
+      "#{self.name}_#{@data[link_name][:name]}_#{k}"
+
+    else
+      fail ArgumentError, "Unknown key for table name: #{k.inspect}"
+    end
+  end
 
   #
   # Examples:
@@ -232,24 +147,22 @@ class I_Dig_Sql
   #   field :in
   #   field :raw_in
   #
-  protected(
-    def field *args
+  def field *args
 
-      case args
-      when [:out], [:in]
-        "#{name}.#{data[args.last][:name]}"
-      when [:raw, :out], [:raw, :in]
-        "#{name}.#{self[:DEFAULT].data[args.last]}"
-      when [:owner_id], [:type_id]
-        "#{name}.#{args.first}"
-      else
-        fail ArgumentError, "Unknown args: #{args.inspect}"
-      end # === case
+    case args
+    when [:out], [:in]
+      "#{name}.#{data[args.last][:name]}"
+    when [:raw, :out], [:raw, :in]
+      "#{name}.#{self[:DEFAULT].data[args.last]}"
+    when [:owner_id], [:type_id]
+      "#{name}.#{args.first}"
+    else
+      fail ArgumentError, "Unknown args: #{args.inspect}"
+    end # === case
 
-    end # === def field
-  )
+  end # === def field
 
-  protected def compile target = nil
+  def compile target = nil
     return(self[target].compile) if target && target != name
 
     if !@SQL
@@ -314,27 +227,6 @@ class I_Dig_Sql
 
     @SQL = (@WITH + @FRAGMENT).strip
   end # === fragments_to_raw
-
-  def WITH
-    withs = @WITHS.dup
-    maps  = []
-    done  = {}
-    while name = withs.shift
-      next if done[name]
-      if name == :DEFAULT || !self.has_key?(name)
-        done[name] = true
-        next
-      end
-
-      fragment = self[name].FRAGMENT
-      fragment.gsub!(/^/, "    ") if ENV['IS_DEV']
-      maps << "#{name} AS (\n#{fragment}\n  )"
-      withs.concat self[name].WITHS
-      done[name] = true
-    end # === while name
-
-    maps.join ",\n  "
-  end
 
   # === END: Rendering DSL ==========================================
 
