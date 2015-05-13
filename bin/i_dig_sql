@@ -43,7 +43,7 @@ case "$action" in
       file=$(echo "$CHANGE" | cut -d' ' -f 3)
       path="${dir}$file"
 
-      if [[ "$op" == *CLOSE_WRITE* && $file == *.rb*  ]]; then
+      if [[ "$op" == *CLOSE_WRITE* && ( $file == *.rb* || $file == *.md* ) ]]; then
         echo -e "\n=== Running test:"
         bin/i_dig_sql test "$@" || echo ""
       fi

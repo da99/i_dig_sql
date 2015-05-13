@@ -26,7 +26,7 @@ class I_Dig_Sql
 
         case name
         when :SELECT
-          h[:SELECT].concat args.join(' AS ')
+          h[:SELECT] << args.join(' AS ')
 
         when :FROM, :LEFT, :RIGHT, :INNER
           str = if name == :FROM
@@ -85,7 +85,7 @@ class I_Dig_Sql
       while s[HAS_VAR] 
         s.gsub!(/\{\{\s?([^\}]+)\s?\}\}/) do |match|
           key = $1.strip.to_sym
-          self[key]
+          dig.sql(key)
           withs << key
           key
         end
@@ -98,7 +98,7 @@ class I_Dig_Sql
           if has_key?(key)
 
             tokens.pop
-            target = self[key]
+            target = dig.sql key
 
             if target.is_a?(Proc)
               target.call self, *tokens
