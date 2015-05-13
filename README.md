@@ -24,27 +24,27 @@ Please note that none of this is ready yet.
   require 'i_dig_sql'
 
   sql = I_Dig_Sql.new
-  sql[:HEROES]   = "SELECT id FROM hero    WHERE id = :PERSON_ID"
-  sql[:VILLIANS] = "SELECT id FROM villian WHERE id = :PERSON_ID"
+  sql.set :HEROES,   "SELECT id FROM hero    WHERE id = :PERSON_ID"
+  sql.set :VILLIANS, "SELECT id FROM villian WHERE id = :PERSON_ID"
 
-  sql.push(:SIDE_KICKS) {
+  sql.set(:SIDE_KICKS) {
 
-    from :HEROES, :good_guys do
+    FROM :HEROES, :good_guys do
       select :nick_name, :name
     end
 
-    inner :PEOPLE, :others do
-      on '_.heroe_id == __.id'
-      select :nick_name, :name
+    INNER :PEOPLE, :others do
+      ON '_.heroe_id == __.id'
+      SELECT :nick_name, :name
     end
 
-    select 'field' => 'a_field'
+    SELECT 'field' => 'a_field'
 
-    group_by 'id DESC', 'created_at ASC'
+    GROUP_BY 'id DESC', 'created_at ASC'
 
   }
 
-  sql << %^
+  sql.set :SQL, %^
     SELECT *
     FROM people
     WHERE

@@ -2,6 +2,17 @@
 
 describe :I_Dig_Sql do
 
+  it "runs" do
+    dig = I_Dig_Sql.new
+    dig.sql :heroes do
+      FROM(:tbl, :heroes) {
+        SELECT(:nickname, :name)
+      }
+    end
+
+    sql(dig.sql(:heroes)).should == sql("SELECT heroes.nickname AS name FROM tbl heroes")
+  end # === it
+
   it "runs the code from README.md" do
     readme = File.read(File.expand_path(File.dirname(__FILE__) + '/../README.md'))
     code   = readme[/```ruby([^`]+)```/] && $1
