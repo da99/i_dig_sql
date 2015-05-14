@@ -48,15 +48,13 @@ Please note that none of this is ready yet.
     SELECT *
     FROM people
     WHERE
-      id IN ( << HEROES >> AND status = :ALIVE)
-      OR
       id IN (SELECT ID FROM {{ HEROES }} AND status = :ALIVE)
       OR
-      id IN ( << * HEROES >> )
+      id IN ( {{ HEROES * }} )
       OR
-      id IN ( << patron_id VILLIANS >> )
+      id IN ( {{ VILLIANS patron_id }} )
       OR
-      id IN ( << VILLIANS >> )
+      id IN ( {{ VILLIANS * }} )
   ^
 
   puts sql.to_sql

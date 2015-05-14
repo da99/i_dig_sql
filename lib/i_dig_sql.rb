@@ -11,7 +11,7 @@ class I_Dig_Sql
     :GROUP_BY, :ORDER_BY
   )
 
-  HAS_VAR          = /(\{\{|\<\<)[^\}\>]+(\}\}|\>\>)/
+  HAS_VAR          = /(\{\{)[^\}\>]+(\}\})/
   SELECT_FROM_REG  = /SELECT.+FROM.+/
   COMMAS_OR_COLONS = /(\,|\:)+/
   ALL_UNDERSCORE   = /\A[_]+\Z/
@@ -76,77 +76,48 @@ class I_Dig_Sql
       EOF
     end # === def box_to_string
 
+    #
+    #  Examples:
+    #    string( "...", dig)
+    #    string( dig ) { FROM ... }
+    #
     def string *args, &blok
       dig   = args.pop
       str   = args.shift || box_to_string(Box.new &blok)
       s     = str.dup
       withs = []
 
-      while s[HAS_VAR] 
+      while s[HAS_VAR]
         s.gsub!(/\{\{\s?([^\}]+)\s?\}\}/) do |match|
-          key = $1.strip.to_sym
-          dig.sql(key)
+          pieces = $1.split
+          name   = pieces.shift
+          key    = name.to_sym
+          args   = pieces
           withs << key
-          key
-        end
-
-        s.gsub!(/\<\<\s?([^\>]+)\s?\>\>/) do |match|
-          tokens = $1.gsub(COMMAS_OR_COLONS, NOTHING).split.map(&:to_sym)
-
-          key = tokens.last
-
-          if has_key?(key)
-
-            tokens.pop
-            target = dig.sql key
-
-            if target.is_a?(Proc)
-              target.call self, *tokens
-            else
-              field  = tokens.empty? ? nil : tokens.join(' ')
-
-              if field
-                withs << key
-                tokens.pop
-                "SELECT #{field} FROM #{key}"
-              else
-                target.to_sql
-              end
-            end
-
-          elsif has_key?(tokens.first)
-            self[tokens.shift].call self, *tokens
-
+          case args.size
+          when 0
+            name
           else
-            fail ArgumentError, "Not found: #{$1}"
-
-          end # === if has_key?
+            "SELECT #{args.join ', '} FROM #{name}"
+          end # === case
         end
       end # === while s HAS_VAR
 
       with = if withs.empty?
-                ""
-              else
-                withs = withs.dup
-                maps  = []
-                done  = {}
-                while name = withs.shift
-                  next if done[name]
-                  if name == :DEFAULT || !dig.has_key?(name)
-                    done[name] = true
-                    next
-                  end
+               ""
+             else
+               maps  = []
+               done  = {}
+               while name = withs.shift
+                 next if done[name]
+                 fragment = dig.sql(name)
+                 fragment.gsub!(/^/, "    ") if ENV['IS_DEV']
+                 maps << "#{name} AS (\n#{fragment}\n  )"
+                 done[name] = true
+               end # === while name
 
-                  fragment = dig[name].FRAGMENT
-                  fragment.gsub!(/^/, "    ") if ENV['IS_DEV']
-                  maps << "#{name} AS (\n#{fragment}\n  )"
-                  withs.concat dig[name].withs
-                  done[name] = true
-                end # === while name
-
-                maps.join ",\n  "
-                %^WITH\n  #{with()}\n\n^
-              end
+               %^WITH\n  #{maps.join ",\n  "}\n\n^
+             end
 
       (with + s)
     end # === def extract_withs
@@ -190,7 +161,7 @@ class I_Dig_Sql
     end # === case
   end # === def sql
 
-  def to_sql name, vars = {}
+  def to_sql name = :SQL, vars = {}
     [sql(name), @vars.merge(vars)]
   end # === def to_sql
 

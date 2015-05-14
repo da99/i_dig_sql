@@ -15,7 +15,7 @@ describe :I_Dig_Sql do
 
   it "runs the code from README.md" do
     readme = File.read(File.expand_path(File.dirname(__FILE__) + '/../README.md'))
-    code   = readme[/```ruby([^`]+)```/] && $1
+    code   = (readme[/```ruby([^`]+)```/] && $1).split("\n").map { |l| l.sub('puts ', '') }.join("\n")
     line   = 0
     readme.split("\n").detect { |l| line = line + 1; l['```ruby'] }
     should.not.raise {
@@ -25,13 +25,13 @@ describe :I_Dig_Sql do
 
   it "adds WITH: {{MY_NAME}}" do
     sql = I_Dig_Sql.new
-    sql[:MY_HERO] = "SELECT * FROM hero"
-    sql[:MY_NAME] = "SELECT * FROM name"
-    sql << %^
+    sql.sql :MY_HERO, "SELECT * FROM hero"
+    sql.sql :MY_NAME, "SELECT * FROM name"
+    sql.sql :SQL, %^
       {{MY_HERO}}
       {{MY_NAME}}
     ^
-    sql(sql).should == sql(%^
+    sql(sql.sql :SQL).should == sql(%^
       WITH
       MY_HERO AS (
         SELECT * FROM hero
@@ -44,25 +44,16 @@ describe :I_Dig_Sql do
     ^)
   end
 
-  it "replaces text with content: << MY_NAME >>" do
-    sql = I_Dig_Sql.new
-    sql[:MY_HERO] = "SELECT * FROM hero"
-    sql << %^
-      << MY_HERO >>
-    ^
-    sql(sql).should == "SELECT * FROM hero"
-  end # === it
-
   %w{ * id }.each { |s|
-    it "adds WITH: << #{s} MY_NAME >>" do
+    it "adds WITH: {{ MY_NAME #{s} }}" do
       sql = I_Dig_Sql.new
-      sql[:MY_HERO] = "SELECT id, p_id FROM hero"
-      sql[:MY_NAME] = "SELECT id, n_id FROM name"
-      sql << %^
-        << #{s} MY_NAME >>
-        << #{s} MY_HERO >>
+      sql.sql :MY_HERO, "SELECT id, p_id FROM hero"
+      sql.sql :MY_NAME, "SELECT id, n_id FROM name"
+      sql.sql :SQL, %^
+        {{ MY_NAME #{s} }}
+        {{ MY_HERO #{s} }}
       ^
-      sql(sql).should == sql(%^
+      sql(sql.sql :SQL).should == sql(%^
         WITH
         MY_NAME AS (
           SELECT id, n_id FROM name
@@ -73,6 +64,13 @@ describe :I_Dig_Sql do
         SELECT #{s} FROM MY_NAME
         SELECT #{s} FROM MY_HERO
       ^)
+    end # === it
+
+    it "replaces text with content: {{ MY_NAME #{s} }}" do
+      sql = I_Dig_Sql.new
+      sql.sql :MY_HERO, "SELECT * FROM hero"
+      sql.sql :SQL,     " {{ MY_HERO #{s} }} "
+      sql(sql.sql :SQL).should == "WITH MY_HERO AS ( SELECT * FROM hero ) SELECT #{s} FROM MY_HERO"
     end # === it
   }
 
