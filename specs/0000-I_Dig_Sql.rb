@@ -72,8 +72,90 @@ describe :I_Dig_Sql do
       sql.sql :SQL,     " {{ MY_HERO #{s} }} "
       sql(sql.sql :SQL).should == "WITH MY_HERO AS ( SELECT * FROM hero ) SELECT #{s} FROM MY_HERO"
     end # === it
-  }
+  } # === %w{}
+
+  it "renders nested replacements"  do
+    i = I_Dig_Sql.new
+    i.sql :THIRD,  "SELECT id FROM phantom"
+    i.sql :SECOND, " {{ THIRD }}  "
+    i.sql :FIRST,  " {{ SECOND }} "
+    i.sql :SQL,    " {{ FIRST }}  "
+    sql(i.sql :SQL).should == "SELECT id FROM phantom"
+  end # === it
+
+  it "prints CTE definitions once, if used multiple times" do
+    i = I_Dig_Sql.new
+    i.sql :my_cte, "SELECT * FROM my"
+    i.sql :SQL, <<-EOF
+      {{my_cte}}
+      {{my_cte}}
+    EOF
+    sql(i.sql :SQL).should == sql(%^
+      WITH
+      my_cte AS (
+        SELECT * FROM my
+      )
+      my_cte
+      my_cte
+    ^)
+  end # === it
 
 end # === describe :I_Dig_Sql
 
 
+describe :to_sql do
+
+  it "returns an array of: [string, hash]" do
+    s = "select * from THE_WORLD"
+    i = I_Dig_Sql.new
+    i.sql :SQL, s
+    i.to_sql(:SQL).should == [s, {}]
+  end # === it
+
+  it "merges the hash passed to it" do
+    s = "select * from THE_UNI"
+    i = I_Dig_Sql.new
+    i.sql :SQL, s
+    i.to_sql(:SQL, {:a=>:b}).should == [s, {:a=>:b}]
+  end # === it
+
+  it "does not save :vars passed to it" do
+    s = "select * from THE_UNI"
+    i = I_Dig_Sql.new
+    i.sql :SQL, s
+    i.to_sql(:SQL, {:a=>:b})
+    i.vars.should == {}
+  end # === it
+
+end # === describe :to_sql
+
+
+describe ":box" do
+
+  it "turns a box into a String" do
+    sql = I_Dig_Sql.new
+    sql.sql :joins do
+
+      FROM(:n, :notes) {
+        SELECT(:long_name, :name)
+      }
+
+      LEFT(:f, :fails) {
+        ON('_.n = __.n')
+        SELECT(:long_name, :name)
+      }
+
+    end
+
+    sql(sql.sql :joins).should == sql(%^
+      SELECT
+        notes.long_name AS name,
+        fails.long_name AS name
+      FROM
+        n notes
+        LEFT JOIN f fails
+        ON fails.n = notes.n
+    ^)
+  end # === it
+
+end # === describe ":box"

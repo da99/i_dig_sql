@@ -110,8 +110,8 @@ class I_Dig_Sql
                done  = {}
                while name = withs.shift
                  next if done[name]
-                 fragment = dig.sql(name)
-                 fragment.gsub!(/^/, "    ") if ENV['IS_DEV']
+                 fragment = dig.fragment(name)
+                 (fragment = fragment.gsub(/^/, "    ")) if ENV['IS_DEV']
                  maps << "#{name} AS (\n#{fragment}\n  )"
                  done[name] = true
                end # === while name
@@ -119,14 +119,16 @@ class I_Dig_Sql
                %^WITH\n  #{maps.join ",\n  "}\n\n^
              end
 
-      (with + s)
+      [with + s, s]
     end # === def extract_withs
 
   end # === class self ===
 
+  attr_reader :vars
   def initialize
     @stack = []
     @sqls  = {}
+    @frags = {}
     @vars  = {}
   end # === def initialize
 
@@ -145,6 +147,11 @@ class I_Dig_Sql
     end # === case
   end # === def var
 
+  def fragment name
+    fail ArgumentError, "SQL fragment not found: #{name.inspect}" unless @frags.has_key?(name)
+    @frags[name]
+  end
+
   def sql name, *args, &blok
     case
 
@@ -154,7 +161,7 @@ class I_Dig_Sql
     when (args.size == 0 && block_given?) || args.size == 1
       fail ArgumentError, "Already set: #{name.inspect}" if @sqls.has_key?(name)
 
-      @sqls[name] = I_Dig_Sql.string(*(args), self, &blok)
+      @sqls[name], @frags[name] = I_Dig_Sql.string(*(args), self, &blok)
     else
       fail ArgumentError, "Unknown args: #{args.inspect}"
 
@@ -162,6 +169,7 @@ class I_Dig_Sql
   end # === def sql
 
   def to_sql name = :SQL, vars = {}
+    @vars.freeze
     [sql(name), @vars.merge(vars)]
   end # === def to_sql
 
