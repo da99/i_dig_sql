@@ -57,7 +57,7 @@ Please note that none of this is ready yet.
       id IN ( {{ VILLIANS * }} )
   ^
 
-  puts sql.to_sql
+  puts sql.pair
 
 ```
 

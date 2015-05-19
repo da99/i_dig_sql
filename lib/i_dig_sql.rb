@@ -22,6 +22,7 @@ class I_Dig_Sql
 
     def box_to_string arr
       h = {:SELECT=>[], :FROM=>[], :GROUP_BY=>[], :ORDER_BY=>[]}
+      table_name_stack = []
       arr.each { |raw|
         name, args, blok = raw
 
@@ -30,6 +31,7 @@ class I_Dig_Sql
           h[:SELECT] << args.join(' AS ')
 
         when :FROM, :LEFT, :RIGHT, :INNER
+          table_name_stack.push args.last
           str = if name == :FROM
                   args.join(' ')
                 else
@@ -55,8 +57,16 @@ class I_Dig_Sql
                 fail ArgumentError, "Unknown name: #{name.inspect}"
               end
             }
-            str << "\n" << on.join(' AND ')
+
+            ( str << "\nON " << on.join(' AND ') ) unless on.empty?
           end
+
+          str.gsub!(/\b([_]+)(?=\.)/) { |match|
+            t_name = table_name_stack[match.size * -1]
+            fail ArgumentError, "Name not found for: #{match}" if !t_name
+            t_name
+          }
+
           h[:FROM] << str
 
         when :GROUP_BY, :ORDER_BY
@@ -69,7 +79,7 @@ class I_Dig_Sql
 
       <<-EOF
         SELECT
-          #{h[:SELECT].empty? ? '*' : h[:SELECT].join("\n")}
+          #{h[:SELECT].empty? ? '*' : h[:SELECT].join(",\n")}
         FROM
           #{h[:FROM].join "\n"}
         #{ h[:GROUP_BY].empty? ? '' : 'GROUP BY ' + h[:GROUP_BY].join(', ')}
