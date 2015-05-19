@@ -1,5 +1,6 @@
 
 
+require 'i_dig_sql/H'
 require 'boxomojo'
 
 class I_Dig_Sql
@@ -94,6 +95,7 @@ class I_Dig_Sql
           key    = name.to_sym
           args   = pieces
           withs << key
+          withs.concat(dig.sql(key)[:withs]) if dig.sqls.has_key?(key)
           case args.size
           when 0
             name
@@ -108,28 +110,28 @@ class I_Dig_Sql
              else
                maps  = []
                done  = {}
-               while name = withs.shift
+               withs.uniq!
+               withs.each { |name|
                  next if done[name]
-                 fragment = dig.fragment(name)
+                 fragment = dig.sql(name)[:base]
                  (fragment = fragment.gsub(/^/, "    ")) if ENV['IS_DEV']
                  maps << "#{name} AS (\n#{fragment}\n  )"
                  done[name] = true
-               end # === while name
+               } # === each withs
 
                %^WITH\n  #{maps.join ",\n  "}\n\n^
              end
 
-      [with + s, s]
+      [with + s, s, withs]
     end # === def extract_withs
 
   end # === class self ===
 
-  attr_reader :vars
+  attr_reader :vars, :sqls
   def initialize
     @stack = []
-    @sqls  = {}
-    @frags = {}
-    @vars  = {}
+    @sqls  = H.new
+    @vars  = H.new
   end # === def initialize
 
   def var name, *args
@@ -147,11 +149,11 @@ class I_Dig_Sql
     end # === case
   end # === def var
 
-  def fragment name
-    fail ArgumentError, "SQL fragment not found: #{name.inspect}" unless @frags.has_key?(name)
-    @frags[name]
-  end
-
+  # Example:
+  #   sql(:name)
+  #   sql(:name, 'string')
+  #   sql(:name) { FROM ... }
+  #
   def sql name, *args, &blok
     case
 
@@ -159,18 +161,18 @@ class I_Dig_Sql
       @sqls[name]
 
     when (args.size == 0 && block_given?) || args.size == 1
-      fail ArgumentError, "Already set: #{name.inspect}" if @sqls.has_key?(name)
+      @sqls[name] = H.new
+      @sqls[name][:complete], @sqls[name][:base], @sqls[name][:withs] = I_Dig_Sql.string(*(args), self, &blok)
 
-      @sqls[name], @frags[name] = I_Dig_Sql.string(*(args), self, &blok)
     else
       fail ArgumentError, "Unknown args: #{args.inspect}"
 
     end # === case
   end # === def sql
 
-  def to_sql name = :SQL, vars = {}
-    @vars.freeze
-    [sql(name), @vars.merge(vars)]
+  def pair name = :SQL, vars = {}
+    @vars.freeze unless @vars.frozen?
+    [sql(name)[:complete], @vars.merge(vars)]
   end # === def to_sql
 
 end # === class I_Dig_Sql ===

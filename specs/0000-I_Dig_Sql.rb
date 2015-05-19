@@ -80,7 +80,15 @@ describe :I_Dig_Sql do
     i.sql :SECOND, " {{ THIRD }}  "
     i.sql :FIRST,  " {{ SECOND }} "
     i.sql :SQL,    " {{ FIRST }}  "
-    sql(i.sql :SQL).should == "SELECT id FROM phantom"
+    sql(i.sql :SQL).should == sql(
+      <<-EOF
+        WITH
+        FIRST AS ( SECOND ),
+        SECOND AS ( THIRD ),
+        THIRD AS ( SELECT id FROM phantom )
+        FIRST
+      EOF
+    )
   end # === it
 
   it "prints CTE definitions once, if used multiple times" do
@@ -103,31 +111,31 @@ describe :I_Dig_Sql do
 end # === describe :I_Dig_Sql
 
 
-describe :to_sql do
+describe ":pair" do
 
   it "returns an array of: [string, hash]" do
     s = "select * from THE_WORLD"
     i = I_Dig_Sql.new
     i.sql :SQL, s
-    i.to_sql(:SQL).should == [s, {}]
+    i.pair(:SQL).should == [s, {}]
   end # === it
 
   it "merges the hash passed to it" do
     s = "select * from THE_UNI"
     i = I_Dig_Sql.new
     i.sql :SQL, s
-    i.to_sql(:SQL, {:a=>:b}).should == [s, {:a=>:b}]
+    i.pair(:SQL, {:a=>:b}).should == [s, {:a=>:b}]
   end # === it
 
   it "does not save :vars passed to it" do
     s = "select * from THE_UNI"
     i = I_Dig_Sql.new
     i.sql :SQL, s
-    i.to_sql(:SQL, {:a=>:b})
+    i.pair(:SQL, {:a=>:b})
     i.vars.should == {}
   end # === it
 
-end # === describe :to_sql
+end # === describe pair
 
 
 describe ":box" do

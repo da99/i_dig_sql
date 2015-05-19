@@ -41,11 +41,20 @@ module Kernel
 end # === module Kernel
 
 def sql o
-  if o.is_a? String
-    return o.split.join(" ")
+  case o
+  when String
+    o.split.join(" ")
+
+  when I_Dig_Sql::H
+    sql o[:complete]
+
+  when Array
+    sql o.first
+
   else
     sql(o.to_sql)
-  end
-end
+
+  end # === case
+end # === def sql
 
 
